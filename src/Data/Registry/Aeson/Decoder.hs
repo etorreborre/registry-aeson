@@ -12,6 +12,7 @@ module Data.Registry.Aeson.Decoder where
 
 import Control.Monad.Fail
 import Data.Aeson
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
 import Data.List (nub)
 import Data.Registry
@@ -45,9 +46,9 @@ decoderAp (Decoder da) (Decoder db) = Decoder $ \case
 -- * DECODING
 
 -- | Use a Decoder to decode a ByteString into the desired type
-decodeByteString :: forall a. (Typeable a) => Decoder a -> ByteString -> Either Text a
+decodeByteString :: forall a. (Typeable a) => Decoder a -> BL.ByteString -> Either Text a
 decodeByteString d bs =
-  case eitherDecodeStrict bs of
+  case eitherDecode bs of
     Left e -> Left $ "cannot unpack the bytestring as a Value: " <> show e <> ". The bytestring is: " <> show bs
     Right v ->
       case decodeValue d v of
@@ -143,65 +144,49 @@ makeDecoder :: Name -> ExpQ
 makeDecoder typeName = appE (varE $ mkName "fun") $ do
   info <- reify typeName
   case info of
-    TyConI (NewtypeD _context _name _typeVars _kind (RecC constructor [(_, _, other)]) _deriving) -> do
-      -- \(a::Decoder OldType) -> fmap NewType d
-      lamE [sigP (varP $ mkName "d") (appT (conT $ mkName "Decoder") (pure other))] (appE (appE (varE $ mkName "fmap") (conE . mkName $ show constructor)) (varE $ mkName "d"))
-    TyConI (NewtypeD _context _name _typeVars _kind (NormalC constructor [(_, other)]) _deriving) -> do
-      -- \(a::Decoder OldType) -> fmap NewType d
-      lamE [sigP (varP $ mkName "d") (appT (conT $ mkName "Decoder") (pure other))] (appE (appE (varE $ mkName "fmap") (conE . mkName $ show constructor)) (varE $ mkName "d"))
+    TyConI (NewtypeD _context _name _typeVars _kind constructor _deriving) ->
+      makeConstructorsDecoder typeName [constructor]
     TyConI (DataD _context _name _typeVars _kind constructors _deriving) -> do
       case constructors of
         [] -> do
           qReport True "can not make an Decoder for an empty data type"
           fail "decoders creation failed"
-        [c] -> makeConstructorDecoder typeName c
         _ -> makeConstructorsDecoder typeName constructors
     other -> do
       qReport True ("can only create decoders for an ADT, got: " <> show other)
       fail "decoders creation failed"
 
--- | Make a Decoder for a single Constructor, where each field of the constructor is encoded as an element of an Object
-makeConstructorDecoder :: Name -> Con -> ExpQ
-makeConstructorDecoder typeName c = do
-  ts <- typesOf c
-  fields <- fieldsOf c
-  cName <- nameOf c
-  let decoderParameters = (\(t, n) -> sigP (varP (mkName $ "d" <> show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..]
-  let paramP = varP (mkName "o")
-  let paramE = varE (mkName "o")
-  let matchClause =
-        match
-          (varP (mkName "anObject"))
-          (normalB (applyDecoder cName [0 .. length ts - 1] fields))
-          []
-
-  let decoded = caseE paramE [matchClause, makeErrorClause typeName]
-
-  -- (\(d1::Decoder Type1) (d2::Decoder Type2) ... -> Decoder (\case
-  --     Array (toList -> [o1, o2, ...]) -> Constructor <$> decode d1 o1 <*> decode d2 o2 ...))
-  --     other -> Error ("not a valid " <> constructorType <> ": " <> show other)
-  lamE decoderParameters (appE (conE (mkName "Decoder")) (lamE [paramP] decoded))
-
--- | Make a Decoder for a each Constructor of a data type:
---     - each constructor is specified by an Array [Number n, o1, o2, ...]
---     - n specifies the number of the constructor
---     - each object in the array represents a constructor field
+-- | Make a decoder for a given data type by extracting just enough metadata about the data type in order to be able
+--   to parse a Value
+--
+--   For example for the data type:
+--
+--   data T = T1 {f1::Int, f2::Int} | T2 Int Int
+--
+--   we add this function to the registry:
+--
+--   \opts d1 d2 d3 -> Decoder $ \v -> do
+--     case makeToConstructor opts [Constructor "T1" ["f1", "f2"], Constructor "T2" []] v of
+--       ToConstructor "T1" [v1, v2]-> T1 <$> d1 v1 <*> d2 v2 ...
+--       ToConstructor "T2" [v1, v2]-> T2 <$> d1 v1 <*> d3 v2 ...
+--       other -> Left ("cannot decode " <> valueToText v)
 makeConstructorsDecoder :: Name -> [Con] -> ExpQ
 makeConstructorsDecoder typeName cs = do
   ts <- nub . join <$> for cs typesOf
-  let decoderParameters = (\(t, n) -> sigP (varP (mkName $ "d" <> show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..]
-  let paramP = varP (mkName "o")
-  let paramE = varE (mkName "o")
-  let matchClauses = uncurry (makeMatchClause ts) <$> zip cs [0 ..]
+  let decoderParameters = sigP (varP (mkName "os")) (conT $ mkName "Options") : ((\(t, n) -> sigP (varP (mkName $ "d" <> show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..])
+  -- makeToConstructor os [Constructor "T1" ["f1", "f2"], Constructor "T2" []] v
+  let paramP = varP (mkName "v")
+  constructorDefs <- for cs $ \c -> do
+    cName <- dropQualified <$> nameOf c
+    fields <- fmap (litE . StringL . show . dropQualified) <$> fieldsOf c
+    conE (mkName "ConstructorDef") `appE` (litE . StringL $ show cName) `appE` listE fields
+  let paramE = varE (mkName "makeToConstructor") `appE` varE (mkName "os") `appE` listE (pure <$> constructorDefs) `appE` varE (mkName "v")
+  let matchClauses = makeMatchClause ts <$> cs
   let errorClause = makeErrorClause typeName
   let decoded = caseE paramE (matchClauses <> [errorClause])
-
-  -- (\(d1::Decoder Type1) (d2::Decoder Type2) ... -> Decoder (\case
-  --     Array (toList -> [Number n, o1, o2, ...]) -> Constructor <$> decode d1 o1 <*> decode d2 o2 ...))
-  --     other -> Error ("not a valid " <> constructorType <> ": " <> show other)
   lamE decoderParameters (appE (conE (mkName "Decoder")) (lamE [paramP] decoded))
 
--- | Return an error if an object is not an Array as expected
+-- | Return an error if a value dose not have the expected type
 --   other -> Error (mconcat ["not a valid ", show typeName, ": ", show other])
 makeErrorClause :: Name -> MatchQ
 makeErrorClause typeName = do
@@ -216,29 +201,26 @@ makeErrorClause typeName = do
   match (varP $ mkName "_1") (normalB (appE (conE $ mkName "Left") errorMessage)) []
 
 -- | Decode the nth constructor of a data type
-makeMatchClause :: [Type] -> Con -> Integer -> MatchQ
-makeMatchClause allTypes c constructorIndex = do
+--    ToConstructor "T1" [v1, v2]-> T1 <$> d1 v1 <*> d2 v2 ...
+makeMatchClause :: [Type] -> Con -> MatchQ
+makeMatchClause allTypes c = do
   ts <- typesOf c
-  fields <- fieldsOf c
-  print (ts, fields)
   constructorTypes <- fmap snd <$> indexConstructorTypes allTypes ts
-  cName <- nameOf c
-  let paramsP = conP (mkName "Number") [litP (IntegerL constructorIndex)] : ((\n -> varP $ mkName $ "o" <> show n) <$> constructorTypes)
+  cName <- dropQualified <$> nameOf c
+  let fieldsP = listP $ (\i -> varP $ mkName ("v" <> show i)) <$> constructorTypes
   match
-    (conP (mkName "Array") [viewP (varE (mkName "toList")) (listP paramsP)])
-    (normalB (applyDecoder cName constructorTypes fields))
+    (conP (mkName "Right") [conP (mkName "ToConstructor") [litP (StringL . show $ cName), fieldsP]])
+    (normalB (applyDecoder cName constructorTypes))
     []
 
 -- ConstructorName <$> decode d1 o1 <*> decode d2 o2 ...
-applyDecoder :: Name -> [Int] -> [Name] -> ExpQ
-applyDecoder cName [] [] = appE (varE $ mkName "pure") (conE cName)
-applyDecoder cName (n : ns) (f : fs) = do
+applyDecoder :: Name -> [Int] -> ExpQ
+applyDecoder cName [] = appE (varE $ mkName "pure") (conE cName)
+applyDecoder cName (n : ns) = do
   let cons = appE (varE $ mkName "pure") (conE cName)
-  foldr (\(i, fi) r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i fi) (appE (appE (varE (mkName "ap")) cons) $ decodeAt n f) (reverse (zip ns fs))
+  foldr (\i r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i) (appE (appE (varE (mkName "ap")) cons) $ decodeAt n) (reverse ns)
   where
-    decodeAt i fi = appE (appE (appE (varE $ mkName "decodeField") (varE $ mkName ("d" <> show i))) (litE . StringL . show $ fi)) (varE $ mkName "anObject")
--- this should really not happen
-applyDecoder cName ns fs = fail $ "there should be the same number of types and fields for " <> show cName <> ". Remaining types: " <> show ns <> ". Remaining fields: " <> show fs
+    decodeAt i = appE (appE (varE $ mkName "decodeValue") (varE $ mkName ("d" <> show i))) (varE $ mkName ("v" <> show i))
 
 decodeField :: Decoder a -> Text -> Value -> Either Text a
 decodeField (Decoder d) name (Object ls) =
@@ -248,69 +230,60 @@ decodeField (Decoder d) name (Object ls) =
 decodeField _ name o =
   Left $ "field '" <> name <> "' not found in: " <> show o
 
-{-
+-- | Data parsed from a given Value to be used to create an instance of a type
+data ToConstructor = ToConstructor
+  { -- | Name of the constructor to use (without modification)
+    toConstructorName :: Text,
+    -- | Name of the values to decode for each field of the constructor instance
+    toConstructorValues :: [Value]
+  }
+  deriving (Eq, Show)
 
-\opts e1 e2 e3 -> Encoder $ \a ->
-  makeEncoding opts `appE` (FromConstructor names name [
-    (fieldName1, e1 $ field1 a),
-    (fieldName2, e2 $ field2 a),
-    (fieldName3, e3 $ field3 a)]
-    )
+-- | Metadata for a given constructor in a data type
+data ConstructorDef = ConstructorDef
+  { -- | Name of the constructor
+    constructorDefName :: Text,
+    -- | Name of the constructor fields (if any are defined with names. An empty list otherwise)
+    constructorDefFields :: [Text]
+  }
+  deriving (Eq, Show)
 
+-- | Parse the values of a given constructor from:
+--     - the encoding options
+--     - the list of constructor definitions
+--     - a JSON value
+makeToConstructor :: Options -> [ConstructorDef] -> Value -> Either Text ToConstructor
+makeToConstructor options constructors value =
+  go constructors []
+  where
+    go :: [ConstructorDef] -> [Text] -> Either Text ToConstructor
+    go [] errors = Left $ "no constructor definition found: " <> show errors
+    go (c : cs) errors =
+      case tryMakeToConstructor options (applyOptions options c) value of
+        Right tc -> Right tc
+        Left e -> go cs (errors <> [e])
 
-makeFromConstructor :: Con -> ExpQ
+tryMakeToConstructor :: Options -> ConstructorDef -> Value -> Either Text ToConstructor
+tryMakeToConstructor _options (ConstructorDef constructorName []) value =
+  Right $ ToConstructor constructorName [value]
 
-data FromConstructor = FromConstructor {
-  fromConstructorNames :: [Text],
-  fromConstructorName :: Text,
-  fromConstructorValues :: [(Text, Value)]
-}
+tryMakeToConstructor options (ConstructorDef constructorName _fieldNames) value =
+  case sumEncoding options of
+    TaggedObject tagFieldName _contentFieldName ->
+      case value of
+        Object values ->
+          case HM.lookup (toS tagFieldName) values of
+            Just _ -> do
+              pure (ToConstructor constructorName (HM.elems values))
+            Nothing ->
+              Left "constructor not found in Object"
+        _ ->
+          Left "constructor not found"
+    _ ->
+      Left "todo sum encoding"
 
-makeEncoding :: Options -> FromConstructor -> (Value, Encoding)
-
----
-
-makeToConstructor :: Options -> Value -> ToConstructor
-
-
-\opts d1 d2 d3 -> Decoder $ \v ->
-  case makeToConstructor opts v of
-    ToConstructor name [(f1, v1), (f2, v2)] -> do
-      c <- $(findConstructor name)
-      a1 <- d1 v1
-      a2 <- d1 v2
-      pure $ c `appE` a1 `appE` a2 ...
-    other -> Left "boom"
-
-
-data ToConstructor = ToConstructor {
-  toConstructorName :: Text,
-  toConstructorValues :: [(Text, Value)]
-}
-
-
-
-1. if all nullary constructors
-
-  if allNullaryToStringTag os then
-    case v of
-      String c1 -> Right C1
-      String c2 -> Right C2
-      other -> Left $ "unknown constructor:" <> show other
-  else \v ->
-    case sumEncoding os of
-      TaggedObject tagFieldName contentsFieldName -> do
-        constructorName <- getFieldValueAsString tagFieldName v
-        case constructorName of
-
-        contents <- getFieldValue contentsFieldName v
-        $(decodeConstructor (constructorTagModifier os $ constructorName) contents)
-      UntaggedValue ->
-      ObjectWithSingleField ->
-      TwoElemArray -> Right C2
-      other -> Left $ "unknown constructor:" <> show other
-
-
-
-\(os::Options) (d0: Decoder a) (Decoder d1) (Decoder d2) -> \v ->
--}
+applyOptions :: Options -> ConstructorDef -> ConstructorDef
+applyOptions options (ConstructorDef constructorName fieldNames) =
+  ConstructorDef
+    (toS . constructorTagModifier options . toS $ constructorName)
+    (toS . fieldLabelModifier options . toS <$> fieldNames)
