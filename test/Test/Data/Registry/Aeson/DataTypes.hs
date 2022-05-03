@@ -65,6 +65,9 @@ data AllNullary
 instance ToJSON AllNullary where
   toJSON = genericToJSON allNullaryOptions
 
+instance FromJSON AllNullary where
+  parseJSON = genericParseJSON allNullaryOptions
+
 fieldLabelModifierOptions = defaultOptions {fieldLabelModifier = ("__" <>)}
 
 data FieldLabelModifier
@@ -74,6 +77,9 @@ data FieldLabelModifier
 
 instance ToJSON FieldLabelModifier where
   toJSON = genericToJSON fieldLabelModifierOptions
+
+instance FromJSON FieldLabelModifier where
+  parseJSON = genericParseJSON fieldLabelModifierOptions
 
 constructorTagModifierOptions = defaultOptions {constructorTagModifier = ("__" <>)}
 
@@ -85,6 +91,9 @@ data ConstructorTagModifier
 instance ToJSON ConstructorTagModifier where
   toJSON = genericToJSON constructorTagModifierOptions
 
+instance FromJSON ConstructorTagModifier where
+  parseJSON = genericParseJSON constructorTagModifierOptions
+
 omitNothingFieldsOptions = defaultOptions {omitNothingFields = True}
 
 data OmitNothingFields
@@ -95,6 +104,9 @@ data OmitNothingFields
 instance ToJSON OmitNothingFields where
   toJSON = genericToJSON omitNothingFieldsOptions
 
+instance FromJSON OmitNothingFields where
+  parseJSON = genericParseJSON omitNothingFieldsOptions
+
 unwrapUnaryRecordsOptions = defaultOptions {unwrapUnaryRecords = True}
 
 newtype UnwrapUnaryRecords = UnwrapUnaryRecords1 {uuField1 :: Int}
@@ -103,6 +115,9 @@ newtype UnwrapUnaryRecords = UnwrapUnaryRecords1 {uuField1 :: Int}
 instance ToJSON UnwrapUnaryRecords where
   toJSON = genericToJSON unwrapUnaryRecordsOptions
 
+instance FromJSON UnwrapUnaryRecords where
+  parseJSON = genericParseJSON unwrapUnaryRecordsOptions
+
 tagSingleConstructorsOptions = defaultOptions {tagSingleConstructors = True}
 
 newtype TagSingleConstructors = TagSingleConstructors1 {tsField1 :: Int}
@@ -110,6 +125,9 @@ newtype TagSingleConstructors = TagSingleConstructors1 {tsField1 :: Int}
 
 instance ToJSON TagSingleConstructors where
   toJSON = genericToJSON tagSingleConstructorsOptions
+
+instance FromJSON TagSingleConstructors where
+  parseJSON = genericParseJSON tagSingleConstructorsOptions
 
 untaggedValueOptions = defaultOptions {sumEncoding = UntaggedValue}
 
@@ -121,6 +139,9 @@ data UntaggedValueSumEncoding
 instance ToJSON UntaggedValueSumEncoding where
   toJSON = genericToJSON untaggedValueOptions
 
+instance FromJSON UntaggedValueSumEncoding where
+  parseJSON = genericParseJSON untaggedValueOptions
+
 objectWithSingleFieldSumEncodingOptions = defaultOptions {sumEncoding = ObjectWithSingleField}
 
 data ObjectWithSingleFieldSumEncoding
@@ -131,6 +152,9 @@ data ObjectWithSingleFieldSumEncoding
 instance ToJSON ObjectWithSingleFieldSumEncoding where
   toJSON = genericToJSON objectWithSingleFieldSumEncodingOptions
 
+instance FromJSON ObjectWithSingleFieldSumEncoding where
+  parseJSON = genericParseJSON objectWithSingleFieldSumEncodingOptions
+
 twoElemArraySumEncodingOptions = defaultOptions {sumEncoding = TwoElemArray}
 
 data TwoElemArraySumEncoding
@@ -140,3 +164,6 @@ data TwoElemArraySumEncoding
 
 instance ToJSON TwoElemArraySumEncoding where
   toJSON = genericToJSON twoElemArraySumEncodingOptions
+
+instance FromJSON TwoElemArraySumEncoding where
+  parseJSON = genericParseJSON twoElemArraySumEncodingOptions
