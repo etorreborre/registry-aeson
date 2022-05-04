@@ -15,16 +15,17 @@ import Control.Monad.Fail
 import Data.Aeson
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
-import Data.List (nub)
+import Data.List (nub, (\\))
 import Data.Registry
 import Data.Registry.Aeson.TH
 import Data.Registry.Internal.Types hiding (Value)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Vector as Vector
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
-import Protolude hiding (Type)
-import Prelude (String)
+import Protolude as P hiding (Type)
+import Prelude (String, show)
 
 -- * DECODER DATA TYPE
 
@@ -51,11 +52,11 @@ decoderAp (Decoder da) (Decoder db) = Decoder $ \case
 decodeByteString :: forall a. (Typeable a) => Decoder a -> BL.ByteString -> Either Text a
 decodeByteString d bs =
   case eitherDecode bs of
-    Left e -> Left $ "cannot unpack the bytestring as a Value: " <> show e <> ". The bytestring is: " <> show bs
+    Left e -> Left $ "Cannot parse the string as a Value: " <> P.show e <> ". The string is: " <> P.show bs
     Right v ->
       case decodeValue d v of
         Right a -> pure a
-        Left e -> Left $ toS e <> ". Cannot decode " <> toS (showType @a) <> " from the Value: " <> show v
+        Left e -> Left $ "Cannot decode the type '" <> toS (showType @a) <> "' >> " <> e
 
 -- * CREATING DECODERS
 
@@ -94,7 +95,7 @@ decodePairOf = fun (pairOfDecoder @a @b)
 pairOfDecoder :: forall a b. (Typeable a, Typeable b) => Decoder a -> Decoder b -> Decoder (a, b)
 pairOfDecoder (Decoder a) (Decoder b) = Decoder $ \case
   Array [oa, ob] -> (,) <$> a oa <*> b ob
-  other -> Left . toS $ "not a pair of " <> showType @a <> "," <> showType @b <> ": " <> show other
+  _ -> Left . toS $ "not a pair of " <> showType @a <> "," <> showType @b
 
 -- | Add a Maybe (a, b, c) to a registry of decoders
 --   usage: decoders = decodeTripleOf @a @b @c <: otherDecoders
@@ -106,7 +107,7 @@ decodeTripleOf = fun (tripleOfDecoder @a @b @c)
 tripleOfDecoder :: forall a b c. (Typeable a, Typeable b, Typeable c) => Decoder a -> Decoder b -> Decoder c -> Decoder (a, b, c)
 tripleOfDecoder (Decoder a) (Decoder b) (Decoder c) = Decoder $ \case
   Array [oa, ob, oc] -> (,,) <$> a oa <*> b ob <*> c oc
-  other -> Left . toS $ "not a triple of " <> showType @a <> "," <> showType @b <> "," <> showType @c <> ": " <> show other
+  _ -> Left . toS $ "not a triple of " <> showType @a <> "," <> showType @b <> "," <> showType @c
 
 -- | Add a Decoder [a] to a registry of decoders
 --   usage: decoders = decodeListOf @a <: otherDecoders
@@ -117,8 +118,8 @@ decodeListOf = fun (listOfDecoder @a)
 
 listOfDecoder :: forall a. (Typeable a) => Decoder a -> Decoder [a]
 listOfDecoder (Decoder a) = Decoder $ \case
-  Object os -> for (toList os) a
-  other -> Left . toS $ "not a list of " <> showType @a <> ": " <> show other
+  Array vs -> for (toList vs) a
+  _ -> Left . toS $ "not a list of " <> showType @a
 
 -- | Add a Decoder (NonEmpty a) to a registry of decoders
 --   usage: decoders = decodeNonEmptyOf @a <: otherDecoders
@@ -133,10 +134,10 @@ nonEmptyOfDecoder (Decoder a) = Decoder $ \case
     case toList values of
       [] -> Left . toS $ "expected a NonEmpty of " <> showType @a
       o : os -> (:|) <$> a o <*> for os a
-  other -> Left . toS $ "not a list of " <> showType @a <> ": " <> show other
+  _ -> Left . toS $ "not a list of " <> showType @a
 
 showType :: forall a. (Typeable a) => String
-showType = show (typeRep (Proxy :: Proxy a))
+showType = P.show (typeRep (Proxy :: Proxy a))
 
 -- * TEMPLATE HASKELL
 
@@ -155,7 +156,7 @@ makeDecoder typeName = appE (varE $ mkName "fun") $ do
           fail "decoders creation failed"
         _ -> makeConstructorsDecoder typeName constructors
     other -> do
-      qReport True ("can only create decoders for an ADT, got: " <> show other)
+      qReport True ("can only create decoders for an ADT, got: " <> P.show other)
       fail "decoders creation failed"
 
 -- | Make a decoder for a given data type by extracting just enough metadata about the data type in order to be able
@@ -175,70 +176,75 @@ makeDecoder typeName = appE (varE $ mkName "fun") $ do
 makeConstructorsDecoder :: Name -> [Con] -> ExpQ
 makeConstructorsDecoder typeName cs = do
   ts <- nub . join <$> for cs typesOf
-  let decoderParameters = sigP (varP (mkName "os")) (conT $ mkName "Options") : ((\(t, n) -> sigP (varP (mkName $ "d" <> show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..])
+  let decoderParameters = sigP (varP (mkName "os")) (conT $ mkName "Options") : ((\(t, n) -> sigP (varP (mkName $ "d" <> P.show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..])
   -- makeToConstructor os [Constructor "T1" ["f1", "f2"], Constructor "T2" []] v
   let paramP = varP (mkName "v")
   constructorDefs <- for cs $ \c -> do
     cName <- dropQualified <$> nameOf c
-    fields <- fmap (litE . StringL . show . dropQualified) <$> fieldsOf c
-    fieldTypes <- fmap (litE . StringL . show) <$> typesOf c
-    varE (mkName "makeConstructorDef") `appE` (litE . StringL $ show cName) `appE` listE fields `appE` listE fieldTypes
+    fields <- fmap (litE . StringL . P.show . dropQualified) <$> fieldsOf c
+    fieldTypes <- fmap (litE . StringL . P.show . getSimpleTypeName) <$> typesOf c
+    varE (mkName "makeConstructorDef") `appE` (litE . StringL $ P.show cName) `appE` listE fields `appE` listE fieldTypes
   let paramE = varE (mkName "makeToConstructor") `appE` varE (mkName "os") `appE` listE (pure <$> constructorDefs) `appE` varE (mkName "v")
-  let matchClauses = makeMatchClause ts <$> cs
-  let errorClause = makeErrorClause typeName
-  let decoded = caseE paramE (matchClauses <> [errorClause])
+  let matchClauses = makeMatchClause typeName ts <$> cs
+  let decoded = caseE paramE (matchClauses <> [makeErrorClauseRight typeName, makeErrorClauseLeft typeName])
   lamE decoderParameters (appE (conE (mkName "Decoder")) (lamE [paramP] decoded))
 
--- | Return an error if a value dose not have the expected type
---   other -> Error (mconcat ["not a valid ", show typeName, ": ", show other])
-makeErrorClause :: Name -> MatchQ
-makeErrorClause typeName = do
-  let errorMessage =
-        appE (varE $ mkName "mconcat") $
-          listE
-            [ litE (StringL "not a valid "),
-              litE (StringL $ show typeName),
-              litE (StringL ": "),
-              appE (varE $ mkName "show") (varE $ mkName "_1")
-            ]
-  match (varP $ mkName "_1") (normalB (appE (conE $ mkName "Left") errorMessage)) []
+-- | Return an error if we construct an incorrect intermediary `ToConstructor` value
+--   This is a bug in the library
+makeErrorClauseRight :: Name -> MatchQ
+makeErrorClauseRight _typeName = do
+  let errorMessage = (varE (mkName "<>") `appE` litE (StringL "This is a registry-aeson bug! ")) `appE` (varE (mkName "show") `appE` varE (mkName "_1"))
+  match (conP (mkName "Right") [varP $ mkName "_1"]) (normalB (appE (conE $ mkName "Left") errorMessage)) []
+
+-- | Return an error the json value cannot be decoded with a constructor name and some values
+makeErrorClauseLeft :: Name -> MatchQ
+makeErrorClauseLeft _typeName = do
+  let errorMessage = varE $ mkName "_1"
+  match (conP (mkName "Left") [varP $ mkName "_1"]) (normalB (appE (conE $ mkName "Left") errorMessage)) []
 
 -- | Decode the nth constructor of a data type
 --    ToConstructor "T1" [v1, v2]-> T1 <$> d1 v1 <*> d2 v2 ...
-makeMatchClause :: [Type] -> Con -> MatchQ
-makeMatchClause allTypes c = do
+makeMatchClause :: Name -> [Type] -> Con -> MatchQ
+makeMatchClause typeName allTypes c = do
   ts <- typesOf c
   constructorTypes <- fmap snd <$> indexConstructorTypes allTypes ts
   cName <- dropQualified <$> nameOf c
-  let fieldsP = listP $ (\i -> varP $ mkName ("v" <> show i)) <$> constructorTypes
+  let fieldsP = listP $ (\i -> varP $ mkName ("v" <> P.show i)) <$> constructorTypes
   match
-    (conP (mkName "Right") [conP (mkName "ToConstructor") [litP (StringL . show $ cName), fieldsP]])
-    (normalB (applyDecoder cName constructorTypes))
+    (conP (mkName "Right") [conP (mkName "ToConstructor") [litP (StringL . P.show $ cName), fieldsP]])
+    (normalB (applyDecoder typeName cName constructorTypes))
     []
 
--- ConstructorName <$> decode d1 o1 <*> decode d2 o2 ...
-applyDecoder :: Name -> [Int] -> ExpQ
-applyDecoder cName [] = appE (varE $ mkName "pure") (conE cName)
-applyDecoder cName (n : ns) = do
+-- ConstructorName <$> decodeFieldValue d1 o1 <*> decodeFieldValue d2 o2 ...
+applyDecoder :: Name -> Name -> [Int] -> ExpQ
+applyDecoder _typeName cName [] = appE (varE $ mkName "pure") (conE cName)
+applyDecoder typeName cName (n : ns) = do
   let cons = appE (varE $ mkName "pure") (conE cName)
   foldr (\i r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i) (appE (appE (varE (mkName "ap")) cons) $ decodeAt n) (reverse ns)
   where
-    decodeAt i = appE (appE (varE $ mkName "decodeValue") (varE $ mkName ("d" <> show i))) (varE $ mkName ("v" <> show i))
+    decodeAt i =
+      varE (mkName "decodeFieldValue") `appE` varE (mkName ("d" <> P.show i))
+        `appE` (litE . StringL . P.show . dropQualified $ typeName)
+        `appE` (litE . StringL . P.show . dropQualified $ cName)
+        `appE` varE (mkName ("v" <> P.show i))
 
-decodeField :: Decoder a -> Text -> Value -> Either Text a
-decodeField (Decoder d) name (Object ls) =
-  case HM.lookup name ls of
-    Just v -> d v
-    Nothing -> Left $ "field '" <> name <> "' not found in: " <> show ls
-decodeField _ name o =
-  Left $ "field '" <> name <> "' not found in: " <> show o
+-- | Use a decoder to decode a field
+--   The constructor name, the type where the field is inserted and the field definition
+--   are used to provide better error messages
+decodeFieldValue :: Decoder a -> Text -> Text -> (Maybe FieldDef, Value) -> Either Text a
+decodeFieldValue d typeName constructorName (field, v) =
+  case decodeValue d v of
+    Right a -> pure a
+    Left e -> do
+      let constructor = if typeName == constructorName then "" else "(" <> constructorName <> ") "
+      Left $ maybe constructor (\(fn, ft) -> constructor <> "'" <> fn <> " :: " <> ft <> "' >> ") field <> e
 
 -- | Data parsed from a given Value to be used to create an instance of a type
 data ToConstructor = ToConstructor
   { -- | Name of the constructor to use (without modification)
     toConstructorName :: Text,
     -- | Name of the values to decode for each field of the constructor instance
-    toConstructorValues :: [Value]
+    toConstructorValues :: [(Maybe FieldDef, Value)]
   }
   deriving (Eq, Show)
 
@@ -255,7 +261,13 @@ data ConstructorDef = ConstructorDef
     -- | Types of the constructor fields
     constructorDefFieldsTypes :: [Text]
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show ConstructorDef where
+  show (ConstructorDef n _ [] _ fts) =
+    toS (n <> " [" <> T.intercalate ", " fts) <> "]"
+  show (ConstructorDef n _ fns _ fts) =
+    toS (n <> " {" <> T.intercalate ", " ((\(fn, ft) -> fn <> " :: " <> ft) <$> zip fns fts)) <> "}"
 
 makeConstructorDef :: Text -> [Text] -> [Text] -> ConstructorDef
 makeConstructorDef constructorName fieldNames fieldTypes = ConstructorDef constructorName constructorName fieldNames fieldNames fieldTypes
@@ -265,88 +277,138 @@ makeConstructorDef constructorName fieldNames fieldTypes = ConstructorDef constr
 --     - the list of constructor definitions
 --     - a JSON value
 makeToConstructor :: Options -> [ConstructorDef] -> Value -> Either Text ToConstructor
-makeToConstructor options constructors value =
+makeToConstructor options cs value = do
+  let constructors = applyOptions options <$> cs
+  -- if the type is an enumeration
   if all (null . constructorDefFieldsTypes) constructors && allNullaryToStringTag options
     then case value of
       String name ->
         case find (== name) $ constructorDefName <$> constructors of
           Just n -> pure $ ToConstructor n []
-          Nothing -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> show name
-      other -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> show other
+          Nothing -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> P.show name
+      other -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> P.show other
     else case constructors of
+      -- if there is only one constructor and tagging is not required
       [c]
         | not (tagSingleConstructors options) ->
-          pure $ makeToConstructorFromValue options c value
-      _ ->
+          makeToConstructorFromValue options c value
+      -- otherwise try constructors one by one
+      _ -> do
+        -- check if the sum encoding structure looks correct
+        maybe (pure ()) Left $ checkSumEncoding options constructors value
         go constructors []
   where
     go :: [ConstructorDef] -> [Text] -> Either Text ToConstructor
     go [] errors = Left $ T.intercalate "\n" errors
-    go (c : cs) errors =
-      case tryMakeToConstructor options (applyOptions options c) value of
+    go (c : others) errors =
+      case tryMakeToConstructor options c value of
         Right tc -> Right tc
-        Left e -> go cs (errors <> [e])
+        Left e -> go others (errors <> [e])
 
+-- | Try to find if a constructor definition can be used to decode the value
+--   depending on the sum encoding
 tryMakeToConstructor :: Options -> ConstructorDef -> Value -> Either Text ToConstructor
-tryMakeToConstructor options c@(ConstructorDef constructorName modifiedConstructorName _ modifiedFieldNames fieldTypes) value =
+tryMakeToConstructor options c@(ConstructorDef constructorName modifiedConstructorName fieldNames modifiedFieldNames fieldTypes) value =
   case sumEncoding options of
     TaggedObject (toS -> tagFieldName) (toS -> contentsFieldName) ->
       case value of
         Object vs ->
           case HM.lookup tagFieldName vs of
             Just tagValue ->
-              case (modifiedFieldNames, fieldTypes) of
+              case (modifiedFieldNames, fieldNames, fieldTypes) of
                 -- constructor with no fields
-                ([], [])
+                ([], [], [])
                   | tagValue == String modifiedConstructorName ->
                     pure $ ToConstructor constructorName []
                 -- constructor with one unnamed field
-                ([], [_])
+                ([], [], [_])
                   | tagValue == String modifiedConstructorName ->
                     case HM.lookup contentsFieldName vs of
-                      Just fieldValue -> pure $ ToConstructor constructorName [fieldValue]
-                      Nothing -> Left $ "failed to instantiate constructor: " <> show c <> ". Field " <> contentsFieldName <> " not found"
+                      Just fieldValue -> pure $ ToConstructor constructorName [(Nothing, fieldValue)]
+                      Nothing -> Left $ "field " <> contentsFieldName <> " not found"
                 -- constructor with one named field
-                ([modifiedFieldName], [_])
+                ([modifiedFieldName], [fieldName], [fieldType])
                   | tagValue == String modifiedConstructorName ->
                     case HM.lookup modifiedFieldName vs of
-                      Just fieldValue -> pure $ ToConstructor constructorName [fieldValue]
-                      Nothing -> Left $ "failed to instantiate constructor: " <> show c <> ". Field " <> modifiedFieldName <> " not found"
+                      Just fieldValue -> pure $ ToConstructor constructorName [(Just (fieldName, fieldType), fieldValue)]
+                      Nothing -> Left $ "field " <> modifiedFieldName <> " not found"
                 -- constructor with at least one named field and possibly Nothing fields
-                (_, _)
+                (_, _, _)
                   | tagValue == String modifiedConstructorName && omitNothingFields options && any (\f -> f `elem` modifiedFieldNames) (HM.keys vs) ->
                     case filter ((/= tagFieldName) . fst) $ HM.toList vs of
-                      [(fieldName, fieldValue)] -> pure $ makeToConstructorFromValue options c (Object [(fieldName, fieldValue)])
-                      _ -> Left $ "failed to instantiate constructor: " <> show c
+                      [(fieldName, fieldValue)] -> makeToConstructorFromValue options c (Object [(fieldName, fieldValue)])
+                      _ -> Left $ "failed to instantiate constructor: " <> P.show c
                 -- constructor with several fields
-                (_, _)
+                (_, _, _)
                   | tagValue == String modifiedConstructorName && any (== contentsFieldName) (HM.keys vs) ->
                     case HM.lookup contentsFieldName vs of
-                      Just contentsValue -> pure $ makeToConstructorFromValue options c contentsValue
-                      _ -> Left $ "failed to instantiate constructor: " <> show c
-                (_, _) ->
-                  Left $ "failed to instantiate constructor: " <> show c
+                      Just contentsValue -> makeToConstructorFromValue options c contentsValue
+                      _ -> Left $ "contents field not found '" <> contentsFieldName <> "'"
+                (_, _, _) ->
+                  Left $ "failed to instantiate constructor: " <> P.show c
             Nothing ->
-              Left $ "failed to instantiate constructor: " <> show c
+              Left $ "failed to instantiate constructor: " <> P.show c
         _ ->
-          Left $ "failed to instantiate constructor: " <> show c <> ". Expected an Object"
+          Left $ "failed to instantiate constructor: " <> P.show c <> ". Expected an Object"
     UntaggedValue ->
-      pure $ makeToConstructorFromValue options c value
+      makeToConstructorFromValue options c value
     ObjectWithSingleField ->
       case value of
         Object [(tagValue, contents)]
           | tagValue == modifiedConstructorName ->
-            pure $ makeToConstructorFromValue options c contents
+            makeToConstructorFromValue options c contents
         _ ->
-          Left $ "failed to instantiate constructor: " <> show c
+          Left $ "failed to instantiate constructor: " <> P.show c
     TwoElemArray ->
       case value of
         Array [tagValue, contents]
           | tagValue == String modifiedConstructorName ->
-            pure $ makeToConstructorFromValue options c contents
+            makeToConstructorFromValue options c contents
         _ ->
-          Left $ "failed to instantiate constructor: " <> show c
+          Left $ "failed to instantiate constructor: " <> P.show c
 
+-- | Check if the sum encoding structure looks correct
+--   This requires the whole list of constructor definitions
+checkSumEncoding :: Options -> [ConstructorDef] -> Value -> Maybe Text
+checkSumEncoding options constructors value = do
+  let constructorModifiedNames = constructorDefModifiedName <$> constructors
+  case sumEncoding options of
+    TaggedObject (toS -> tagFieldName) _contentsFieldName ->
+      case value of
+        Object vs ->
+          case HM.lookup tagFieldName vs of
+            Nothing -> Just $ "tag field '" <> tagFieldName <> "' not found"
+            Just (String tagValue)
+              | tagValue `elem` constructorModifiedNames ->
+                Nothing
+            Just v ->
+              unexpectedConstructor constructorModifiedNames v
+        _ -> Just "expected an Object for a TaggedObject sum encoding"
+    UntaggedValue ->
+      case value of
+        Object _ -> Nothing
+        _ -> Just "expected an Object for an UntaggedValue sum encoding"
+    ObjectWithSingleField ->
+      case value of
+        Object [(tagValue, _)] ->
+          if tagValue `elem` constructorModifiedNames
+            then Nothing
+            else unexpectedConstructor constructorModifiedNames (String tagValue)
+        _ -> Just "expected an Object for an ObjectWithSingleField sum encoding"
+    TwoElemArray ->
+      case value of
+        Array [String tagValue, _] ->
+          if tagValue `elem` constructorModifiedNames
+            then Nothing
+            else unexpectedConstructor constructorModifiedNames (String tagValue)
+        _ -> Just "expected an Array with 2 elements for an TwoElemArray sum encoding"
+  where
+    unexpectedConstructor :: [Text] -> Value -> Maybe Text
+    unexpectedConstructor expected (String c) = Just $ "expected the tag field to be one of: " <> T.intercalate ", " expected <> ", found: " <> c
+    unexpectedConstructor expected other = Just $ "expected the tag field to be one of: " <> T.intercalate ", " expected <> ", found: " <> T.decodeUtf8 (BL.toStrict $ encode other)
+
+-- | Apply at runtime options to a constructor definition in order to be
+--   able to match field definitions in the decoded json value
 applyOptions :: Options -> ConstructorDef -> ConstructorDef
 applyOptions options (ConstructorDef constructorName _ fieldNames _ fieldTypes) =
   ConstructorDef
@@ -356,25 +418,50 @@ applyOptions options (ConstructorDef constructorName _ fieldNames _ fieldTypes) 
     (toS . fieldLabelModifier options . toS <$> fieldNames)
     fieldTypes
 
-makeToConstructorFromValue :: Options -> ConstructorDef -> Value -> ToConstructor
-makeToConstructorFromValue _options (ConstructorDef constructorName _ [] [] _) value =
-  case value of
-    Object vs -> ToConstructor constructorName . reverse $ HM.elems vs
-    Array vs -> ToConstructor constructorName (toList vs)
-    _ -> ToConstructor constructorName [value]
+-- | For a given constructor definition extract all the required fields from a json value
+makeToConstructorFromValue :: Options -> ConstructorDef -> Value -> Either Text ToConstructor
+-- one field, no field name
+makeToConstructorFromValue _options (ConstructorDef constructorName _ [] _ [_]) value =
+  pure $ ToConstructor constructorName [(Nothing, value)]
+-- one field, no field name
+makeToConstructorFromValue options (ConstructorDef constructorName _ [f] _ [t]) value =
+  if unwrapUnaryRecords options
+    then pure $ ToConstructor constructorName [(Nothing, value)]
+    else case value of
+      Object [(f', v)] | f' == f -> pure $ ToConstructor constructorName [(Just (f, t), v)]
+      _ -> Left $ "field '" <> f <> "' not found"
+-- several fields
 makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedFieldNames fieldTypes) value =
   case value of
     Object vs -> do
-      let fields = zip modifiedFieldNames fieldTypes
-      ToConstructor constructorName $ mapMaybe (getValue vs) fields
+      let fieldsNotFound = modifiedFieldNames \\ HM.keys vs
+      if not (omitNothingFields options) && not (null fieldsNotFound)
+        then Left $ case fieldsNotFound of
+          [f] -> "field '" <> f <> "' not found"
+          fs -> "fields  not found: " <> T.intercalate "," fs
+        else do
+          let fields = zip modifiedFieldNames fieldTypes
+          pure $ ToConstructor constructorName $ mapMaybe (getValue vs) fields
       where
-        getValue :: Object -> (Text, Text) -> Maybe Value
+        getValue :: Object -> (Text, Text) -> Maybe (Maybe FieldDef, Value)
         getValue actualFields (fieldName, fieldType) =
           case HM.lookup fieldName actualFields of
-            Just v -> Just v
+            Just v -> Just (Just (fieldName, fieldType), v)
             Nothing ->
-              if omitNothingFields options && "AppT (ConT GHC.Maybe.Maybe)" `T.isPrefixOf` fieldType
-                then Just Null
+              if omitNothingFields options && "Maybe" `T.isPrefixOf` fieldType
+                then Just (Just (fieldName, fieldType), Null)
                 else Nothing
-    Array vs -> ToConstructor constructorName (toList vs)
-    _ -> ToConstructor constructorName [value]
+    Array vs -> pure $ ToConstructor constructorName ((\v -> (Nothing, v)) <$> toList vs)
+    _ -> pure $ ToConstructor constructorName [(Nothing, value)]
+
+-- | Field name + field type
+type FieldDef = (Text, Text)
+
+-- | Return a textual description of a json value
+jsonTypeOf :: Value -> Text
+jsonTypeOf (Object _) = "an Object"
+jsonTypeOf (Array _) = "an Array"
+jsonTypeOf (String _) = "a String"
+jsonTypeOf (Number _) = "a Number"
+jsonTypeOf (Bool _) = "a Bool"
+jsonTypeOf Null = "Null"

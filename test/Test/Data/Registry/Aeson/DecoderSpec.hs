@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
@@ -13,7 +14,7 @@ import qualified Data.Text.Encoding as T
 import Data.Time
 import Protolude
 import Test.Data.Registry.Aeson.DataTypes
-import Test.Tasty.Hedgehogx hiding (maybe, text)
+import Test.Tasty.Hedgehogx hiding (either, maybe, text)
 
 test_decode = test "decode" $ do
   checkDecoding "123" (Identifier 123)
@@ -52,6 +53,39 @@ test_object_with_single_field_sum_encoding = test "ObjectWithSingleFieldSumEncod
 test_two_elem_array_sum_encoding = test "TwoElemArray" $ do
   checkDecodingWith twoElemArraySumEncodingOptions "['TwoElemArraySumEncoding1',{'teaField1':123}]" (TwoElemArraySumEncoding1 123)
 
+test_errors = test "report errors" $ do
+  checkErrors @Identifier "'123'" "Cannot decode the type 'Identifier' >> parsing Int failed, expected Number, but encountered String"
+  checkErrors @Email "{'_email':123}" "Cannot decode the type 'Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
+  checkErrors @Email "{'email':'me@here.com'}" "Cannot decode the type 'Email' >> field '_email' not found"
+  checkErrors @Person "{'email':{'email':'me@here.com'},'identifier':123}" "Cannot decode the type 'Person' >> 'email :: Email' >> field '_email' not found"
+  checkErrors @Person "{'email':{'email':'me@here.com'}}" "Cannot decode the type 'Person' >> field 'identifier' not found"
+  checkErrors @Person "{'email':{'_email':123},'identifier':123}" "Cannot decode the type 'Person' >> 'email :: Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
+  checkErrors @Team
+    "{'name':'team1', 'members': [{'email':{'_email':'1'},'identifier':1}, {'email':{'_email':2},'identifier':2}], 'leaderName':'me'}"
+    "Cannot decode the type 'Team' >> 'members :: [] Person' >> 'email :: Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
+  checkErrors @Team
+    "{'name':'team1', 'members': [{'email':{'_email':'1'},'identifier':1}, {'email':{'_email':'2'},'identifier':2}], 'leaderName':123}"
+    "Cannot decode the type 'Team' >> 'leaderName :: Maybe Text' >> parsing Text failed, expected String, but encountered Number"
+
+  checkErrors @Delivery "{'tag':'NoDeliveryx'}" "Cannot decode the type 'Delivery' >> expected the tag field to be one of: NoDelivery, ByEmail, InPerson, found: NoDeliveryx"
+  checkErrors @Delivery "{'tag1':'NoDelivery'}" "Cannot decode the type 'Delivery' >> tag field 'tag' not found"
+  checkErrorsWith @Delivery
+    constructorTagModifierOptions
+    "{'tag':'_NoDelivery'}"
+    "Cannot decode the type 'Delivery' >> expected the tag field to be one of: __NoDelivery, __ByEmail, __InPerson, found: _NoDelivery"
+
+  checkErrors @Delivery
+    "{'tag':'ByEmail','contents':{'_email':123}}"
+    "Cannot decode the type 'Delivery' >> (ByEmail) '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
+
+  checkErrors @Delivery
+    "{'tag':'InPerson','contents':[{'email':{'_email':'me@here.com'},'identifier':123},{'datetime':'2022-04-18T00:00:12Z'}]}"
+    "Cannot decode the type 'Delivery' >> (InPerson) field '_datetime' not found"
+
+  checkErrors @Delivery
+    "{'tag':'InPerson','contents':[{'email':{'_email':'me@here.com'},'identifier':123},'2022-04-18T00:00:12Z']}"
+    "Cannot decode the type 'Delivery' >> (InPerson) field '_datetime' not found"
+
 -- * HELPERS
 
 checkDecoding :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Text -> a -> PropertyT IO ()
@@ -71,9 +105,24 @@ checkDecodingWith options text a = withFrozenCallStack $ do
   annotate "the decoded Value must be the expected value"
   asValue === Right a
 
+checkErrors :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Text -> Text -> PropertyT IO ()
+checkErrors = withFrozenCallStack . checkErrorsWith @a defaultOptions
+
+checkErrorsWith :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Options -> Text -> Text -> PropertyT IO ()
+checkErrorsWith options text errorMessage = withFrozenCallStack $ do
+  let input = BL.fromStrict . T.encodeUtf8 $ T.replace "'" "\"" text
+  let decoder = make @(Decoder a) (val options <: decoders)
+  let asValue = decodeByteString decoder input
+  let asGeneric = A.eitherDecode @a input
+
+  annotateShow asGeneric
+  asValue === Left errorMessage
+
 decoders :: Registry _ _
 decoders =
   $(makeDecoder ''Delivery)
+    <: $(makeDecoder ''Team)
+    <: decodeListOf @Person
     <: $(makeDecoder ''Person)
     <: $(makeDecoder ''Email)
     <: $(makeDecoder ''Identifier)
@@ -88,6 +137,7 @@ decoders =
     <: $(makeDecoder ''ObjectWithSingleFieldSumEncoding)
     <: $(makeDecoder ''TwoElemArraySumEncoding)
     <: fun utcTimeDecoder
+    <: decodeMaybeOf @Text
     <: jsonDecoder @Text
     <: decodeMaybeOf @Int
     <: jsonDecoder @Int

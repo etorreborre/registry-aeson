@@ -19,6 +19,9 @@ newtype DateTime = DateTime {_datetime :: UTCTime}
 data Person = Person {identifier :: Identifier, email :: Email}
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
+data Team = Team {name :: Text, members :: [Person], leaderName :: Maybe Text}
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
 data Delivery
   = NoDelivery
   | ByEmail Email
