@@ -117,6 +117,7 @@ decoders =
   <: fun dateTimeDecoder
   <: jsonDecoder @Text
   <: jsonDecoder @Int
+  <: val defaultOptions
 
 datetimeDecoder :: Decoder DateTime
 datetimeDecoder = Decoder $ \case

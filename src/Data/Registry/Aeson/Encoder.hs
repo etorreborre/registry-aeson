@@ -177,7 +177,7 @@ data FromConstructor = FromConstructor
 modifyFromConstructorWithOptions :: Options -> FromConstructor -> FromConstructor
 modifyFromConstructorWithOptions options fc = do
   let (fn, fv) =
-        if omitNothingFields options
+        if omitNothingFields options && length (fromConstructorFieldNames fc) == length (fromConstructorValues fc)
           then unzip $ filter ((/= Null) . fst . snd) $ zip (fromConstructorFieldNames fc) (fromConstructorValues fc)
           else (fromConstructorFieldNames fc, fromConstructorValues fc)
   fc
@@ -192,17 +192,15 @@ makeEncoderFromConstructor options fromConstructor = do
   let fc = modifyFromConstructorWithOptions options fromConstructor
   case fc of
     -- nullary constructors
-    FromConstructor _ [] name _ _ ->
-      if allNullaryToStringTag options
-        then (String name, string $ toS name)
-        else makeSumEncoding options fc
+    FromConstructor _ [] name _ _
+      | allNullaryToStringTag options ->
+        (String name, string $ toS name)
     -- single constructor
-    FromConstructor [name] _ _ names values ->
+    FromConstructor [_] _ _ names values ->
       if tagSingleConstructors options
-        then
-          if allNullaryToStringTag options && null values
-            then (String name, string $ toS name)
-            else makeSumEncoding options fc
+        then case (names, values) of
+          (_, [v]) | sumEncoding options == UntaggedValue && unwrapUnaryRecords options -> v
+          _ -> makeSumEncoding options fc
         else do
           case values of
             [(v, e)] ->
@@ -225,13 +223,50 @@ makeSumEncoding :: Options -> FromConstructor -> (Value, Encoding)
 makeSumEncoding options (FromConstructor _constructorNames _constructorTypes constructorTag fieldNames values) = do
   case sumEncoding options of
     UntaggedValue ->
-      valuesToObject fieldNames values
-    TwoElemArray -> do
-      let (vs, es) = valuesToObject fieldNames values
-      (array [String constructorTag, vs], list identity [string $ toS constructorTag, es])
+      if null fieldNames
+        then do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([], []) -> (String $ toS constructorTag, string $ toS constructorTag)
+            ([v], [e]) -> (v, e)
+            _ -> (array vs, list identity es)
+        else do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([v], [e]) | unwrapUnaryRecords options -> (v, e)
+            _ -> valuesToObject fieldNames values
+    TwoElemArray ->
+      if null fieldNames
+        then do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([v], [e]) -> (array [String constructorTag, v], list identity [string $ toS constructorTag, e])
+            _ -> (array [String constructorTag, array vs], list identity [string $ toS constructorTag, list identity es])
+        else do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([v], [e])
+              | unwrapUnaryRecords options ->
+                (array [String constructorTag, v], list identity [string $ toS constructorTag, e])
+            _ -> do
+              let (vs', es') = valuesToObject fieldNames values
+              (array [String constructorTag, vs'], list identity [string $ toS constructorTag, es'])
     ObjectWithSingleField -> do
-      let (vs, es) = valuesToObject fieldNames values
-      (Object $ HM.singleton constructorTag vs, pairs (pair constructorTag es))
+      if null fieldNames
+        then do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([v], [e]) -> (Object $ HM.singleton constructorTag v, pairs (pair constructorTag e))
+            _ -> (Object $ HM.singleton constructorTag (array vs), pairs (pair constructorTag $ list identity es))
+        else do
+          let (vs, es) = unzip values
+          case (vs, es) of
+            ([v], [e])
+              | unwrapUnaryRecords options ->
+                (Object $ HM.singleton constructorTag v, pairs (pair constructorTag e))
+            _ -> do
+              let (vs', es') = valuesToObject fieldNames values
+              (Object $ HM.singleton constructorTag vs', pairs (pair constructorTag es'))
     TaggedObject tagFieldName contentsFieldName ->
       if null values
         then

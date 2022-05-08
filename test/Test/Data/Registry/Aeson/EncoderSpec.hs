@@ -38,6 +38,7 @@ test_constructor_modifier = test "constructorTagModifier" $ do
   checkEncodingsWith constructorTagModifierOptions (ConstructorTagModifier1 123) "{'tag':'__ConstructorTagModifier1','ctField1':123}"
 
 test_omit_nothing_fields = test "omitNothingFields" $ do
+  checkEncodingsWith (defaultOptions {omitNothingFields = True}) (Identifier 123) "123"
   checkEncodingsWith omitNothingFieldsOptions (OmitNothingFields1 Nothing 123) "{'tag':'OmitNothingFields1','onField2':123}"
 
 test_unwrap_unary_records = test "unwrapUnaryRecords" $ do

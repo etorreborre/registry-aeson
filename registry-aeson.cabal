@@ -83,6 +83,8 @@ test-suite spec
       Test.Data.Registry.Aeson.DecoderSpec
       Test.Data.Registry.Aeson.EncoderSpec
       Test.Data.Registry.Aeson.RecursiveSpec
+      Test.Data.Registry.Aeson.RoundtripData
+      Test.Data.Registry.Aeson.RoundtripSpec
       Paths_registry_aeson
   hs-source-dirs:
       test
@@ -122,6 +124,7 @@ test-suite spec
     , base >=4.7 && <5
     , bytestring >=0.10 && <1
     , containers >=0.2 && <1
+    , hedgehog
     , protolude ==0.3.*
     , registry ==0.2.*
     , registry-aeson
