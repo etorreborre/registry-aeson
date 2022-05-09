@@ -272,7 +272,11 @@ data ToConstructor = ToConstructor
     -- | Name of the values to decode for each field of the constructor instance
     toConstructorValues :: [(Maybe FieldDef, Value)]
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show ToConstructor where
+  show (ToConstructor constructorName values) =
+    toS $ constructorName <> "(" <> T.intercalate ", " (encodeAsText <$> values) <> ")"
 
 -- | Try to find the appropriate constructor definition encoded in the json value
 --   then try to decode all its fields with decoding function
@@ -411,7 +415,8 @@ checkSumEncoding options constructors value = do
       case value of
         Object vs ->
           case HM.lookup tagFieldName vs of
-            Nothing -> Just $ "tag field '" <> tagFieldName <> "' not found"
+            Nothing ->
+              Just $ "tag field '" <> tagFieldName <> "' not found"
             Just (String tagValue)
               | tagValue `elem` constructorModifiedNames ->
                 Nothing
@@ -471,8 +476,16 @@ makeToConstructorFromValue options (ConstructorDef constructorName _ [f] [mf] [t
   if unwrapUnaryRecords options
     then pure $ ToConstructor constructorName [(Nothing, value)]
     else case value of
-      Object [(f', v)] | f' == mf -> pure $ ToConstructor constructorName [(Just (f, t), v)]
-      _ -> Left $ "field '" <> mf <> "' not found" <> (if mf == f then "" else " (to create field '" <> f <> "')")
+      Object fs ->
+        case HM.lookup mf fs of
+          Just v ->
+            if rejectUnknownFields options && length fs > 1 then do
+              let unknown = filter (/= mf) $ HM.keys fs
+              Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
+            else
+              pure $ ToConstructor constructorName [(Just (f, t), v)]
+          Nothing -> Left $ "field '" <> mf <> "' not found" <> (if mf == f then "" else " (to create field '" <> f <> "')")
+      _ -> Left $ "expected an object with field '" <> mf <> (if mf == f then "" else " (to create field '" <> f <> "')")
 -- several fields
 makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedFieldNames fieldTypes) value =
   case value of
@@ -483,8 +496,15 @@ makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedF
           [f] -> "field '" <> f <> "' not found"
           fs -> "fields  not found: " <> T.intercalate "," fs
         else do
-          let fields = zip modifiedFieldNames fieldTypes
-          pure $ ToConstructor constructorName $ mapMaybe (getValue vs) fields
+          let tagNames = case sumEncoding options of
+                TaggedObject t c -> [t, c]
+                _ -> []
+          let unknown = (HM.keys vs \\ modifiedFieldNames) \\ (toS <$> tagNames)
+          if rejectUnknownFields options && not (null unknown) then
+            Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
+          else do
+            let fields = zip modifiedFieldNames fieldTypes
+            pure $ ToConstructor constructorName $ mapMaybe (getValue vs) fields
       where
         getValue :: Object -> (Text, Text) -> Maybe (Maybe FieldDef, Value)
         getValue actualFields (fieldName, fieldType) =
@@ -509,9 +529,11 @@ jsonTypeOf (Number _) = "a Number"
 jsonTypeOf (Bool _) = "a Bool"
 jsonTypeOf Null = "Null"
 
+-- | Try to extract a constructor and its values from a list of constructor definitions
 tryConstructors :: [ConstructorDef] -> (ConstructorDef -> Either Text ToConstructor) -> Either Text ToConstructor
 tryConstructors constructors f = foldEither $ f <$> constructors
 
+-- | Return the first right element if available
 foldEither :: [Either Text c] -> Either Text c
 foldEither es = do
   let (ls, rs) = partitionEithers es
@@ -520,5 +542,10 @@ foldEither es = do
     (errors, []) -> Left (T.intercalate " ->> " errors)
     (_, r : _) -> Right r
 
+-- | Encode a value as Text using its ToJSON instance
 encodeAsText :: (ToJSON a) => a -> Text
 encodeAsText = T.decodeUtf8 . BL.toStrict . encode
+
+-- | Return a "s" if there are more than one element
+plural :: Foldable f => f a -> Text
+plural as = if length (toList as) > 1 then "s" else ""

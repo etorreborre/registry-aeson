@@ -84,7 +84,43 @@ test_errors = test "report errors" $ do
 
   checkErrors @Delivery
     "{'tag':'InPerson','contents':[{'email':{'_email':'me@here.com'},'identifier':123},'2022-04-18T00:00:12Z']}"
-    "Cannot decode the type 'Delivery' >> (InPerson) field '_datetime' not found"
+    "Cannot decode the type 'Delivery' >> (InPerson) expected an object with field '_datetime"
+
+test_reject_unknown_fields = test "rejectUnknownFields" $ do
+  let reject = defaultOptions {rejectUnknownFields = True}
+  checkErrorsWith @Email reject "{'_email':'me@here.com', 'f':1}" "Cannot decode the type 'Email' >> unknown field: f"
+  checkErrorsWith @Delivery
+    reject
+    "{'tag':'ByEmail','contents':{'_email':'me@here.com','f':1}}"
+    "Cannot decode the type 'Delivery' >> (ByEmail) unknown field: f"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = UntaggedValue}
+    "{'_email':'me@here.com','f':1}"
+    "Cannot decode the type 'Delivery' >> (ByEmail) unknown field: f"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = TwoElemArray}
+    "['ByEmail', {'_email':'me@here.com','f':1}]"
+    "Cannot decode the type 'Delivery' >> (ByEmail) unknown field: f"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = ObjectWithSingleField}
+    "{'ByEmail':{'_email':'me@here.com','f':1}}"
+    "Cannot decode the type 'Delivery' >> (ByEmail) unknown field: f"
+  checkErrorsWith @Delivery
+    reject
+    "{'tag':'InPerson','contents':[{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]}"
+    "Cannot decode the type 'Delivery' >> (InPerson) unknown fields: f1, f2"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = UntaggedValue}
+    "[{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]"
+    "Cannot decode the type 'Delivery' >> (ByEmail) expected an object with field '_email ->> (InPerson) unknown fields: f1, f2"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = TwoElemArray}
+    "['InPerson', [{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]]"
+    "Cannot decode the type 'Delivery' >> (InPerson) unknown fields: f1, f2"
+  checkErrorsWith @Delivery
+    reject {sumEncoding = ObjectWithSingleField}
+    "{'InPerson':[{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]}"
+    "Cannot decode the type 'Delivery' >> (InPerson) unknown fields: f1, f2"
 
 -- * HELPERS
 
@@ -113,10 +149,9 @@ checkErrorsWith options text errorMessage = withFrozenCallStack $ do
   let input = setDoubleQuotes text
   let decoder = make @(Decoder a) (val options <: decoders)
   let asValue = decodeByteString decoder input
-  let asGeneric = A.eitherDecode @a input
-
-  annotateShow asGeneric
-  (mapLeft setSimpleQuotes asValue) === Left (setSimpleQuotes errorMessage)
+  -- let asGeneric = A.eitherDecode @a input
+  -- annotateShow asGeneric
+  mapLeft setSimpleQuotes asValue === Left (setSimpleQuotes errorMessage)
 
 decoders :: Registry _ _
 decoders =
