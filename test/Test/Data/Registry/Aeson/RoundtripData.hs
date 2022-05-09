@@ -198,3 +198,12 @@ options15 = defaultOptions {constructorTagModifier = labelModifier, sumEncoding 
 instance ToJSON Case15 where toJSON = genericToJSON options15
 
 instance FromJSON Case15 where parseJSON = genericParseJSON options15
+
+data Case16 = Case16
+  deriving (Eq, Show, Generic)
+
+options16 = defaultOptions {allNullaryToStringTag = False}
+
+instance ToJSON Case16 where toJSON = genericToJSON options16
+
+instance FromJSON Case16 where parseJSON = genericParseJSON options16

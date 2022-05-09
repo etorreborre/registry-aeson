@@ -192,9 +192,10 @@ makeEncoderFromConstructor options fromConstructor = do
   let fc = modifyFromConstructorWithOptions options fromConstructor
   case fc of
     -- nullary constructors
-    FromConstructor _ [] name _ _
-      | allNullaryToStringTag options ->
-        (String name, string $ toS name)
+    FromConstructor _ [] name _ _ ->
+      if allNullaryToStringTag options
+        then (String name, string $ toS name)
+        else makeSumEncoding options fc
     -- single constructor
     FromConstructor [_] _ _ names values ->
       if tagSingleConstructors options
@@ -240,6 +241,7 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
         then do
           let (vs, es) = unzip values
           case (vs, es) of
+            ([], []) -> (String constructorTag, string $ toS constructorTag)
             ([v], [e]) -> (array [String constructorTag, v], list identity [string $ toS constructorTag, e])
             _ -> (array [String constructorTag, array vs], list identity [string $ toS constructorTag, list identity es])
         else do
@@ -256,6 +258,7 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
         then do
           let (vs, es) = unzip values
           case (vs, es) of
+            ([], []) -> (String constructorTag, string $ toS constructorTag)
             ([v], [e]) -> (Object $ HM.singleton constructorTag v, pairs (pair constructorTag e))
             _ -> (Object $ HM.singleton constructorTag (array vs), pairs (pair constructorTag $ list identity es))
         else do

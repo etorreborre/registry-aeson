@@ -113,4 +113,4 @@ checkValue :: ByteString -> ByteString -> PropertyT IO ()
 checkValue actual expected = withFrozenCallStack $ do
   case (decode @Value $ BL.fromStrict actual, decode $ BL.fromStrict expected) of
     (Just a, Just e) -> if a == e then success else actual === expected
-    _ -> annotateShow ("cannot decode values", actual, expected) >> failure
+    (actualValue, expectedValue) -> annotateShow ("cannot decode values", actual, expected, actualValue, expectedValue) >> failure

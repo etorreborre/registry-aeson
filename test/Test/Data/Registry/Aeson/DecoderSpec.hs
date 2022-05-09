@@ -6,7 +6,7 @@ module Test.Data.Registry.Aeson.DecoderSpec where
 
 import Data.Aeson hiding (decode)
 import qualified Data.Aeson as A
-import qualified Data.ByteString.Lazy as BL (fromStrict)
+import qualified Data.ByteString.Lazy as BL (ByteString, fromStrict)
 import Data.Registry
 import Data.Registry.Aeson.Decoder
 import qualified Data.Text as T
@@ -93,7 +93,7 @@ checkDecoding = withFrozenCallStack . checkDecodingWith defaultOptions
 
 checkDecodingWith :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Options -> Text -> a -> PropertyT IO ()
 checkDecodingWith options text a = withFrozenCallStack $ do
-  let input = BL.fromStrict . T.encodeUtf8 $ T.replace "'" "\"" text
+  let input = setDoubleQuotes text
   let decoder = make @(Decoder a) (val options <: decoders)
   let asValue = decodeByteString decoder input
   let asGeneric = A.decode input
@@ -110,13 +110,13 @@ checkErrors = withFrozenCallStack . checkErrorsWith @a defaultOptions
 
 checkErrorsWith :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Options -> Text -> Text -> PropertyT IO ()
 checkErrorsWith options text errorMessage = withFrozenCallStack $ do
-  let input = BL.fromStrict . T.encodeUtf8 $ T.replace "'" "\"" text
+  let input = setDoubleQuotes text
   let decoder = make @(Decoder a) (val options <: decoders)
   let asValue = decodeByteString decoder input
   let asGeneric = A.eitherDecode @a input
 
   annotateShow asGeneric
-  asValue === Left errorMessage
+  (mapLeft setSimpleQuotes asValue) === Left (setSimpleQuotes errorMessage)
 
 decoders :: Registry _ _
 decoders =
@@ -150,3 +150,16 @@ utcTimeDecoder = Decoder $ \case
       Just t -> pure t
       Nothing -> Left ("cannot read a UTCTime: " <> s)
   other -> Left $ "not a valid UTCTime: " <> show other
+
+setSimpleQuotes :: Text -> Text
+setSimpleQuotes = T.replace "\"" "'"
+
+setDoubleQuotesText :: Text -> Text
+setDoubleQuotesText = T.replace "'" "\""
+
+setDoubleQuotes :: Text -> BL.ByteString
+setDoubleQuotes = BL.fromStrict . T.encodeUtf8 . setDoubleQuotesText
+
+mapLeft :: (a -> c) -> Either a b -> Either c b
+mapLeft f (Left e) = Left (f e)
+mapLeft _ (Right a) = Right a

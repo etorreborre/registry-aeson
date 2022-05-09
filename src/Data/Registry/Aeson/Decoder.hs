@@ -292,28 +292,30 @@ decodeFromDefinitions options constructorDefs value build = do
 makeToConstructors :: Options -> [ConstructorDef] -> Value -> Either Text [ToConstructor]
 makeToConstructors options cs value = do
   let constructors = applyOptions options <$> cs
+  let isEnumeration = all (null . constructorDefFieldsTypes) constructors
   -- if the type is an enumeration
-  if all (null . constructorDefFieldsTypes) constructors && allNullaryToStringTag options
-    then case value of
+  if isEnumeration && allNullaryToStringTag options then
+     case value of
       String name ->
         case find ((== name) . constructorDefModifiedName) constructors of
           Just c -> purer $ ToConstructor (constructorDefName c) []
           Nothing -> Left $ "expected one of " <> T.intercalate ", " (constructorDefModifiedName <$> constructors) <> ". Got: " <> P.show name
       other -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> encodeAsText other
-    else case constructors of
-      -- if there is only one constructor and tagging is not required
-      [c] | not (tagSingleConstructors options) -> pure <$> makeToConstructorFromValue options c value
-      _ -> do
-        maybe (pure ()) Left $ checkSumEncoding options constructors value
-        case sumEncoding options of
-          TaggedObject (toS -> tagFieldName) (toS -> contentsFieldName) ->
-            pure <$> makeTaggedObject options tagFieldName contentsFieldName constructors value
-          UntaggedValue ->
-            makeUntaggedValue options constructors value
-          ObjectWithSingleField ->
-            pure <$> makeObjectWithSingleField options constructors value
-          TwoElemArray ->
-            pure <$> makeTwoElemArray options constructors value
+  else case constructors of
+    -- if there is only one constructor and tagging is not required (and nullary constructors must be tagged)
+    [c] | not (tagSingleConstructors options) && not (isEnumeration && not (allNullaryToStringTag options)) ->
+      pure <$> makeToConstructorFromValue options c value
+    _ -> do
+      maybe (pure ()) Left $ checkSumEncoding options constructors value
+      case sumEncoding options of
+        TaggedObject (toS -> tagFieldName) (toS -> contentsFieldName) ->
+          pure <$> makeTaggedObject options tagFieldName contentsFieldName constructors value
+        UntaggedValue ->
+          makeUntaggedValue options constructors value
+        ObjectWithSingleField ->
+          pure <$> makeObjectWithSingleField options constructors value
+        TwoElemArray ->
+          pure <$> makeTwoElemArray options constructors value
 
 -- | Try to find which constructor was encoded in a tagged object where the tag field encode the constructor name
 --   and the values are either inline in the object or in a contents field
@@ -380,6 +382,8 @@ makeObjectWithSingleField options constructors value =
       Object [(tagValue, contents)]
         | tagValue == modifiedConstructorName ->
           makeToConstructorFromValue options c contents
+      String v | v == modifiedConstructorName ->
+        makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -392,6 +396,8 @@ makeTwoElemArray options constructors value =
       Array [tagValue, contents]
         | tagValue == String modifiedConstructorName ->
           makeToConstructorFromValue options c contents
+      String v | v == modifiedConstructorName ->
+        makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -420,6 +426,7 @@ checkSumEncoding options constructors value = do
           if tagValue `elem` constructorModifiedNames
             then Nothing
             else unexpectedConstructor constructorModifiedNames (String tagValue)
+        String v | v `elem` constructorModifiedNames -> Nothing
         _ -> Just "expected an Object for an ObjectWithSingleField sum encoding"
     TwoElemArray ->
       case value of
@@ -427,6 +434,7 @@ checkSumEncoding options constructors value = do
           if tagValue `elem` constructorModifiedNames
             then Nothing
             else unexpectedConstructor constructorModifiedNames (String tagValue)
+        String v | v `elem` constructorModifiedNames -> Nothing
         _ -> Just "expected an Array with 2 elements for an TwoElemArray sum encoding"
   where
     unexpectedConstructor :: [Text] -> Value -> Maybe Text
@@ -464,7 +472,7 @@ makeToConstructorFromValue options (ConstructorDef constructorName _ [f] [mf] [t
     then pure $ ToConstructor constructorName [(Nothing, value)]
     else case value of
       Object [(f', v)] | f' == mf -> pure $ ToConstructor constructorName [(Just (f, t), v)]
-      _ -> Left $ "field '" <> mf <> "' not found in " <> encodeAsText value <> (if mf == f then "" else " (to create field '" <> f <> "')")
+      _ -> Left $ "field '" <> mf <> "' not found" <> (if mf == f then "" else " (to create field '" <> f <> "')")
 -- several fields
 makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedFieldNames fieldTypes) value =
   case value of
