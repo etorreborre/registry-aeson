@@ -13,8 +13,9 @@ module Data.Registry.Aeson.Decoder where
 
 import Control.Monad.Fail
 import Data.Aeson
+import qualified Data.Aeson.Key as K
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.HashMap.Strict as HM
 import Data.List (nub, (\\))
 import Data.Registry
 import Data.Registry.Aeson.TH
@@ -298,28 +299,29 @@ makeToConstructors options cs value = do
   let constructors = applyOptions options <$> cs
   let isEnumeration = all (null . constructorDefFieldsTypes) constructors
   -- if the type is an enumeration
-  if isEnumeration && allNullaryToStringTag options then
-     case value of
+  if isEnumeration && allNullaryToStringTag options
+    then case value of
       String name ->
         case find ((== name) . constructorDefModifiedName) constructors of
           Just c -> purer $ ToConstructor (constructorDefName c) []
           Nothing -> Left $ "expected one of " <> T.intercalate ", " (constructorDefModifiedName <$> constructors) <> ". Got: " <> P.show name
       other -> Left $ "expected one of " <> T.intercalate ", " (constructorDefName <$> constructors) <> ". Got: " <> encodeAsText other
-  else case constructors of
-    -- if there is only one constructor and tagging is not required (and nullary constructors must be tagged)
-    [c] | not (tagSingleConstructors options) && not (isEnumeration && not (allNullaryToStringTag options)) ->
-      pure <$> makeToConstructorFromValue options c value
-    _ -> do
-      maybe (pure ()) Left $ checkSumEncoding options constructors value
-      case sumEncoding options of
-        TaggedObject (toS -> tagFieldName) (toS -> contentsFieldName) ->
-          pure <$> makeTaggedObject options tagFieldName contentsFieldName constructors value
-        UntaggedValue ->
-          makeUntaggedValue options constructors value
-        ObjectWithSingleField ->
-          pure <$> makeObjectWithSingleField options constructors value
-        TwoElemArray ->
-          pure <$> makeTwoElemArray options constructors value
+    else case constructors of
+      -- if there is only one constructor and tagging is not required (and nullary constructors must be tagged)
+      [c]
+        | not (tagSingleConstructors options) && not (isEnumeration && not (allNullaryToStringTag options)) ->
+          pure <$> makeToConstructorFromValue options c value
+      _ -> do
+        maybe (pure ()) Left $ checkSumEncoding options constructors value
+        case sumEncoding options of
+          TaggedObject (toS -> tagFieldName) (toS -> contentsFieldName) ->
+            pure <$> makeTaggedObject options tagFieldName contentsFieldName constructors value
+          UntaggedValue ->
+            makeUntaggedValue options constructors value
+          ObjectWithSingleField ->
+            pure <$> makeObjectWithSingleField options constructors value
+          TwoElemArray ->
+            pure <$> makeTwoElemArray options constructors value
 
 -- | Try to find which constructor was encoded in a tagged object where the tag field encode the constructor name
 --   and the values are either inline in the object or in a contents field
@@ -328,7 +330,7 @@ makeTaggedObject options tagFieldName contentsFieldName constructors value =
   tryConstructors constructors $ \c@(ConstructorDef constructorName modifiedConstructorName fieldNames modifiedFieldNames fieldTypes) ->
     case value of
       Object vs ->
-        case HM.lookup tagFieldName vs of
+        case KM.lookup (K.fromText tagFieldName) vs of
           Just tagValue ->
             case (modifiedFieldNames, fieldNames, fieldTypes) of
               -- constructor with no fields
@@ -338,19 +340,19 @@ makeTaggedObject options tagFieldName contentsFieldName constructors value =
               -- constructor with one unnamed field
               ([], [], [_])
                 | tagValue == String modifiedConstructorName ->
-                  case HM.lookup contentsFieldName vs of
+                  case KM.lookup (K.fromText contentsFieldName) vs of
                     Just fieldValue -> pure $ ToConstructor constructorName [(Nothing, fieldValue)]
                     Nothing -> Left $ "field " <> contentsFieldName <> " not found"
               -- constructor with one named field
               ([modifiedFieldName], [fieldName], [fieldType])
                 | tagValue == String modifiedConstructorName ->
-                  case HM.lookup modifiedFieldName vs of
+                  case KM.lookup (K.fromText modifiedFieldName) vs of
                     Just fieldValue -> pure $ ToConstructor constructorName [(Just (fieldName, fieldType), fieldValue)]
                     Nothing -> Left $ "field " <> modifiedFieldName <> " not found"
               -- constructor with at least one named field and possibly Nothing fields
               (_, _, _)
-                | tagValue == String modifiedConstructorName && omitNothingFields options && any (`elem` modifiedFieldNames) (HM.keys vs) -> do
-                  let rest = HM.fromList $ filter ((/= tagFieldName) . fst) $ HM.toList vs
+                | tagValue == String modifiedConstructorName && omitNothingFields options && any (`elem` modifiedFieldNames) (K.toText <$> KM.keys vs) -> do
+                  let rest = KM.fromList $ filter ((/= tagFieldName) . K.toText . fst) $ KM.toList vs
                   makeToConstructorFromValue options c (Object rest)
               -- constructor with several named fields
               (_, _ : _, _)
@@ -358,8 +360,8 @@ makeTaggedObject options tagFieldName contentsFieldName constructors value =
                   makeToConstructorFromValue options c value
               -- constructor with no named fields
               (_, _, _)
-                | tagValue == String modifiedConstructorName && any (== contentsFieldName) (HM.keys vs) ->
-                  case HM.lookup contentsFieldName vs of
+                | tagValue == String modifiedConstructorName && any (== contentsFieldName) (K.toText <$> KM.keys vs) ->
+                  case KM.lookup (K.fromText contentsFieldName) vs of
                     Just contentsValue -> makeToConstructorFromValue options c contentsValue
                     _ -> Left $ "contents field not found '" <> contentsFieldName <> "'"
               (_, _, _) ->
@@ -384,10 +386,11 @@ makeObjectWithSingleField options constructors value =
   tryConstructors constructors $ \c@(ConstructorDef _ modifiedConstructorName _ _ _) ->
     case value of
       Object [(tagValue, contents)]
-        | tagValue == modifiedConstructorName ->
+        | K.toText tagValue == modifiedConstructorName ->
           makeToConstructorFromValue options c contents
-      String v | v == modifiedConstructorName ->
-        makeToConstructorFromValue options c value
+      String v
+        | v == modifiedConstructorName ->
+          makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -400,8 +403,9 @@ makeTwoElemArray options constructors value =
       Array [tagValue, contents]
         | tagValue == String modifiedConstructorName ->
           makeToConstructorFromValue options c contents
-      String v | v == modifiedConstructorName ->
-        makeToConstructorFromValue options c value
+      String v
+        | v == modifiedConstructorName ->
+          makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -414,7 +418,7 @@ checkSumEncoding options constructors value = do
     TaggedObject (toS -> tagFieldName) _contentsFieldName ->
       case value of
         Object vs ->
-          case HM.lookup tagFieldName vs of
+          case KM.lookup (K.fromText tagFieldName) vs of
             Nothing ->
               Just $ "tag field '" <> tagFieldName <> "' not found"
             Just (String tagValue)
@@ -428,9 +432,9 @@ checkSumEncoding options constructors value = do
     ObjectWithSingleField ->
       case value of
         Object [(tagValue, _)] ->
-          if tagValue `elem` constructorModifiedNames
+          if K.toText tagValue `elem` constructorModifiedNames
             then Nothing
-            else unexpectedConstructor constructorModifiedNames (String tagValue)
+            else unexpectedConstructor constructorModifiedNames (String $ K.toText tagValue)
         String v | v `elem` constructorModifiedNames -> Nothing
         _ -> Just "expected an Object for an ObjectWithSingleField sum encoding"
     TwoElemArray ->
@@ -467,7 +471,7 @@ makeToConstructorFromValue _options (ConstructorDef constructorName modifiedCons
         then pure $ ToConstructor constructorName []
         else Left $ "incorrect constructor name, expected: " <> modifiedConstructorName <> ". Got: " <> v
     _ ->
-        Left $ "incorrect constructor name, expected: " <> modifiedConstructorName <> ". Got: " <> encodeAsText value
+      Left $ "incorrect constructor name, expected: " <> modifiedConstructorName <> ". Got: " <> encodeAsText value
 -- one field, no field name
 makeToConstructorFromValue _options (ConstructorDef constructorName _ [] _ [_]) value =
   pure $ ToConstructor constructorName [(Nothing, value)]
@@ -477,20 +481,20 @@ makeToConstructorFromValue options (ConstructorDef constructorName _ [f] [mf] [t
     then pure $ ToConstructor constructorName [(Nothing, value)]
     else case value of
       Object fs ->
-        case HM.lookup mf fs of
+        case KM.lookup (K.fromText mf) fs of
           Just v ->
-            if rejectUnknownFields options && length fs > 1 then do
-              let unknown = filter (/= mf) $ HM.keys fs
-              Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
-            else
-              pure $ ToConstructor constructorName [(Just (f, t), v)]
+            if rejectUnknownFields options && length fs > 1
+              then do
+                let unknown = filter (/= mf) $ K.toText <$> KM.keys fs
+                Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
+              else pure $ ToConstructor constructorName [(Just (f, t), v)]
           Nothing -> Left $ "field '" <> mf <> "' not found" <> (if mf == f then "" else " (to create field '" <> f <> "')")
       _ -> Left $ "expected an object with field '" <> mf <> (if mf == f then "" else " (to create field '" <> f <> "')")
 -- several fields
 makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedFieldNames fieldTypes) value =
   case value of
     Object vs -> do
-      let fieldsNotFound = modifiedFieldNames \\ HM.keys vs
+      let fieldsNotFound = modifiedFieldNames \\ (K.toText <$> KM.keys vs)
       if not (omitNothingFields options) && not (null fieldsNotFound)
         then Left $ case fieldsNotFound of
           [f] -> "field '" <> f <> "' not found"
@@ -499,16 +503,16 @@ makeToConstructorFromValue options (ConstructorDef constructorName _ _ modifiedF
           let tagNames = case sumEncoding options of
                 TaggedObject t c -> [t, c]
                 _ -> []
-          let unknown = (HM.keys vs \\ modifiedFieldNames) \\ (toS <$> tagNames)
-          if rejectUnknownFields options && not (null unknown) then
-            Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
-          else do
-            let fields = zip modifiedFieldNames fieldTypes
-            pure $ ToConstructor constructorName $ mapMaybe (getValue vs) fields
+          let unknown = ((K.toText <$> KM.keys vs) \\ modifiedFieldNames) \\ (toS <$> tagNames)
+          if rejectUnknownFields options && not (null unknown)
+            then Left $ "unknown field" <> plural unknown <> ": " <> T.intercalate ", " unknown
+            else do
+              let fields = zip modifiedFieldNames fieldTypes
+              pure $ ToConstructor constructorName $ mapMaybe (getValue vs) fields
       where
         getValue :: Object -> (Text, Text) -> Maybe (Maybe FieldDef, Value)
         getValue actualFields (fieldName, fieldType) =
-          case HM.lookup fieldName actualFields of
+          case KM.lookup (K.fromText fieldName) actualFields of
             Just v -> Just (Just (fieldName, fieldType), v)
             Nothing ->
               if omitNothingFields options && "Maybe" `T.isPrefixOf` fieldType

@@ -125,7 +125,7 @@ test_reject_unknown_fields = test "rejectUnknownFields" $ do
 -- * HELPERS
 
 checkDecoding :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Text -> a -> PropertyT IO ()
-checkDecoding = withFrozenCallStack . checkDecodingWith defaultOptions
+checkDecoding t a = withFrozenCallStack $ checkDecodingWith defaultOptions t a
 
 checkDecodingWith :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Options -> Text -> a -> PropertyT IO ()
 checkDecodingWith options text a = withFrozenCallStack $ do
@@ -142,7 +142,7 @@ checkDecodingWith options text a = withFrozenCallStack $ do
   asValue === Right a
 
 checkErrors :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Text -> Text -> PropertyT IO ()
-checkErrors = withFrozenCallStack . checkErrorsWith @a defaultOptions
+checkErrors t1 t2 = withFrozenCallStack $ checkErrorsWith @a defaultOptions t1 t2
 
 checkErrorsWith :: forall a. (FromJSON a, ToJSON a, Typeable a, Eq a, Show a) => Options -> Text -> Text -> PropertyT IO ()
 checkErrorsWith options text errorMessage = withFrozenCallStack $ do

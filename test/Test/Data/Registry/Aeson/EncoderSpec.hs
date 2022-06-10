@@ -90,7 +90,7 @@ datetimeEncoder = fromValue $ \(DateTime dt) -> do
 --   Additionally we check that the bytestring created with an Encoding (with encodeByteString)
 --   is the same as the one produced from a Value (with encodeValue)
 checkEncodings :: forall a. (ToJSON a, Typeable a) => a -> Text -> PropertyT IO ()
-checkEncodings = withFrozenCallStack . checkEncodingsWith defaultOptions
+checkEncodings a t = withFrozenCallStack $ checkEncodingsWith defaultOptions a t
 
 checkEncodingsWith :: forall a. (ToJSON a, Typeable a) => Options -> a -> Text -> PropertyT IO ()
 checkEncodingsWith options a expectShort = withFrozenCallStack $ do

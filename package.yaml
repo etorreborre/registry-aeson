@@ -1,5 +1,5 @@
 name: registry-aeson
-version: 0.1.0.0
+version: 0.2.0.0
 synopsis: Aeson encoders / decoders
 
 description: This library provides encoders / decoders which can be easily customized for the Aeson format.
@@ -56,10 +56,10 @@ default-extensions:
 dependencies:
   - base                 >= 4.7   && < 5
   - containers           >= 0.2   && < 1
-  - aeson                >= 1     && < 2
+  - aeson                >= 2     && < 3
   - bytestring           >= 0.10  && < 1
   - protolude            >= 0.3   && < 0.4
-  - registry             >= 0.2   && < 0.3
+  - registry             >= 0.2   && < 0.4
   - template-haskell     >= 2.13  && < 3.0
   - text                 >= 1     && < 2
   - transformers         >= 0.5   && < 2

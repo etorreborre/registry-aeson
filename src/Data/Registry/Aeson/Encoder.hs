@@ -13,9 +13,10 @@ module Data.Registry.Aeson.Encoder where
 import Control.Monad.Fail
 import Data.Aeson
 import Data.Aeson.Encoding.Internal
+import qualified Data.Aeson.Key as K
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL (toStrict)
 import Data.Functor.Contravariant
-import qualified Data.HashMap.Strict as HM
 import Data.List (nub)
 import Data.Registry
 import Data.Registry.Aeson.TH
@@ -222,6 +223,7 @@ makeEncoderFromConstructor options fromConstructor = do
 
 makeSumEncoding :: Options -> FromConstructor -> (Value, Encoding)
 makeSumEncoding options (FromConstructor _constructorNames _constructorTypes constructorTag fieldNames values) = do
+  let fieldNamesKeys = K.fromText <$> fieldNames
   case sumEncoding options of
     UntaggedValue ->
       if null fieldNames
@@ -259,38 +261,38 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
           let (vs, es) = unzip values
           case (vs, es) of
             ([], []) -> (String constructorTag, string $ toS constructorTag)
-            ([v], [e]) -> (Object $ HM.singleton constructorTag v, pairs (pair constructorTag e))
-            _ -> (Object $ HM.singleton constructorTag (array vs), pairs (pair constructorTag $ list identity es))
+            ([v], [e]) -> (Object $ KM.singleton (K.fromText constructorTag) v, pairs (pair (K.fromText constructorTag) e))
+            _ -> (Object $ KM.singleton (K.fromText constructorTag) (array vs), pairs (pair (K.fromText constructorTag) $ list identity es))
         else do
           let (vs, es) = unzip values
           case (vs, es) of
             ([v], [e])
               | unwrapUnaryRecords options ->
-                (Object $ HM.singleton constructorTag v, pairs (pair constructorTag e))
+                (Object $ KM.singleton (K.fromText constructorTag) v, pairs (pair (K.fromText constructorTag) e))
             _ -> do
               let (vs', es') = valuesToObject fieldNames values
-              (Object $ HM.singleton constructorTag vs', pairs (pair constructorTag es'))
+              (Object $ KM.singleton (K.fromText constructorTag) vs', pairs (pair (K.fromText constructorTag) es'))
     TaggedObject tagFieldName contentsFieldName ->
       if null values
         then
-          ( Object $ HM.fromList [(toS tagFieldName, String constructorTag)],
-            pairs (pair (toS tagFieldName) (string $ toS constructorTag))
+          ( Object $ KM.fromList [(K.fromText $ toS tagFieldName, String constructorTag)],
+            pairs (pair (K.fromText $ toS tagFieldName) (string $ toS constructorTag))
           )
         else
           if null fieldNames
             then case unzip values of
               ([v], [e]) ->
-                ( Object $ HM.fromList [(toS tagFieldName, String constructorTag), (toS contentsFieldName, v)],
-                  pairs $ pair (toS tagFieldName) (string $ toS constructorTag) <> pair (toS contentsFieldName) e
+                ( Object $ KM.fromList [(K.fromText $ toS tagFieldName, String constructorTag), (K.fromText $ toS contentsFieldName, v)],
+                  pairs $ pair (K.fromText $ toS tagFieldName) (string $ toS constructorTag) <> pair (K.fromText $ toS contentsFieldName) e
                 )
               (vs, es) ->
-                ( Object $ HM.fromList [(toS tagFieldName, String constructorTag), (toS contentsFieldName, array vs)],
-                  pairs $ pair (toS tagFieldName) (string $ toS constructorTag) <> pair (toS contentsFieldName) (list identity es)
+                ( Object $ KM.fromList [(K.fromText $ toS tagFieldName, String constructorTag), (K.fromText $ toS contentsFieldName, array vs)],
+                  pairs $ pair (K.fromText $ toS tagFieldName) (string $ toS constructorTag) <> pair (K.fromText $ toS contentsFieldName) (list identity es)
                 )
             else do
               let (vs, es) = unzip values
-              ( Object . HM.fromList $ (toS tagFieldName, String constructorTag) : zip fieldNames vs,
-                pairs (foldMap identity $ pair (toS tagFieldName) (string $ toS constructorTag) : (uncurry pair <$> zip fieldNames es))
+              ( Object . KM.fromList $ (K.fromText $ toS tagFieldName, String constructorTag) : zip fieldNamesKeys vs,
+                pairs (foldMap identity $ pair (K.fromText $ toS tagFieldName) (string $ toS constructorTag) : (uncurry pair <$> zip fieldNamesKeys es))
                 )
 
 -- | Create an Object from a list of field names and a list of Values
@@ -298,4 +300,5 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
 valuesToObject :: [Text] -> [(Value, Encoding)] -> (Value, Encoding)
 valuesToObject fieldNames values = do
   let (vs, es) = unzip values
-  (Object $ HM.fromList (zip fieldNames vs), pairs $ foldMap identity (uncurry pair <$> zip fieldNames es))
+  let fieldNamesKeys = K.fromText <$> fieldNames
+  (Object $ KM.fromList (zip fieldNamesKeys vs), pairs $ foldMap identity (uncurry pair <$> zip fieldNamesKeys es))
