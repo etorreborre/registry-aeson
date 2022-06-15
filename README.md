@@ -54,7 +54,7 @@ encoders =
   <: fun datetimeEncoder
   <: jsonEncoder @Text
   <: jsonEncoder @Int
-  <: val defaultOptions
+  <: defaultEncoderOptions
 
 datetimeEncoder :: Encoder DateTime
 datetimeEncoder = fromValue $ \(DateTime dt) -> do
@@ -117,7 +117,7 @@ decoders =
   <: fun dateTimeDecoder
   <: jsonDecoder @Text
   <: jsonDecoder @Int
-  <: val defaultOptions
+  <: defaultDecoderOptions
 
 datetimeDecoder :: Decoder DateTime
 datetimeDecoder = Decoder $ \case
@@ -138,6 +138,21 @@ Given the list of `Decoders` an `Decoder Person` can be retrieved with:
 let decoderPerson = make @(Decoder Person) decoders
 let decoded = decode decoderPerson $ ObjectArray [Number 123, ObjectStr "me@here.com"]
 ```
+
+##### Overriding the generated encoders
+
+There is a bit of flexibility in the way encoders are created with TemplateHaskell.
+
+A custom `ConstructorsEncoder` can be added to the registry to tweak the generation:
+```
+newtype ConstructorEncoder = ConstructorEncoder
+  { encodeConstructor :: Options -> FromConstructor -> (Value, Encoding)
+  }
+```
+A `ConstructorEncoder` uses configuration options and type information extracted from
+given data type (with TemplateHaskell) in order to produce a `Value` and an `Encoding`.
+
+If necessary you can provide your own options and reuse the default function to produce different encoders.
 
 #### Generated decoders
 
@@ -163,3 +178,18 @@ The `makeDecoder` function makes the following functions:
 ```
 
 __NOTE__ this function does not support recursive data types (and much less mutually recursive data types)
+
+##### Overriding the generated decoders
+
+There is a bit of flexibility in the way decoders are created with TemplateHaskell.
+
+A custom `ConstructorsDecoder` can be added to the registry to tweak the generation:
+```
+newtype ConstructorsDecoder = ConstructorsDecoder
+  { decodeConstructors :: Options -> [ConstructorDef] -> Value -> Either Text [ToConstructor]
+  }
+```
+This function extracts values for a set of constructor definitions and returns `ToConstructor` values
+containing a JSON `Value` to be decoded for each field of a given constructor (along with its name).
+
+If necessary you can provide your own options and reuse the default function to produce different decoders.

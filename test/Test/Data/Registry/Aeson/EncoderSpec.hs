@@ -77,7 +77,7 @@ encoders =
     <: encodeMaybeOf @Int
     <: jsonEncoder @Text
     <: jsonEncoder @Int
-    <: val defaultOptions
+    <: defaultEncoderOptions
 
 -- | This Encoder for DateTime reproduces the default generic one
 datetimeEncoder :: Encoder DateTime

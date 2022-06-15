@@ -24,7 +24,9 @@ library
   exposed-modules:
       Data.Registry.Aeson.Decoder
       Data.Registry.Aeson.Encoder
-      Data.Registry.Aeson.TH
+      Data.Registry.Aeson.TH.Decoder
+      Data.Registry.Aeson.TH.Encoder
+      Data.Registry.Aeson.TH.TH
   other-modules:
       Paths_registry_aeson
   hs-source-dirs:

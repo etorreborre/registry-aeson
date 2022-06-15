@@ -8,22 +8,22 @@
   This module provides several functions to create encoders and assemble them into a registry of encoders.
 -}
 
-module Data.Registry.Aeson.Encoder where
+module Data.Registry.Aeson.Encoder
+  ( module Data.Registry.Aeson.Encoder,
+    module Data.Registry.Aeson.TH.Encoder,
+  )
+where
 
-import Control.Monad.Fail
 import Data.Aeson
 import Data.Aeson.Encoding.Internal
 import qualified Data.Aeson.Key as K
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL (toStrict)
 import Data.Functor.Contravariant
-import Data.List (nub)
 import Data.Registry
-import Data.Registry.Aeson.TH
+import Data.Registry.Aeson.TH.Encoder
 import Data.Registry.Internal.Types hiding (Value)
 import qualified Data.Vector as V
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
 import Protolude hiding (Type, list)
 
 -- * ENCODER DATA TYPE
@@ -105,57 +105,24 @@ nonEmptyOfEncoder = contramap toList . listOfEncoder
 array :: [Value] -> Value
 array = Array . V.fromList
 
--- * TEMPLATE HASKELL
+-- * DEFAULT VALUES
 
--- | Make an Encoder for a given data type
---   Usage: $(makeEncoder ''MyDataType) <: otherEncoders
-makeEncoder :: Name -> ExpQ
-makeEncoder encodedType = appE (varE $ mkName "fun") $ do
-  info <- reify encodedType
-  case info of
-    TyConI (NewtypeD _context _name _typeVars _kind constructor _deriving) ->
-      makeConstructorsEncoder [constructor]
-    TyConI (DataD _context _name _typeVars _kind constructors _deriving) ->
-      makeConstructorsEncoder constructors
-    other -> do
-      qReport True ("can only create encoders for an ADT, got: " <> show other)
-      fail "encoders creation failed"
+defaultEncoderOptions :: Registry _ _
+defaultEncoderOptions =
+  fun defaultConstructorEncoder
+    <: val defaultOptions
 
--- \(o::Options) (e0::Encoder A0) (e1::Encoder A1) ... -> Encoder $ \a ->
---   case a of
---     T1 a0 a1 ... -> makeEncoderFromConstructor o (FromConstructor names types "T1" fieldNames [encode e0 a0, encode e1 a1, ...])
---     T2 a0 a4 ... -> makeEncoderFromConstructor o (FromConstructor names types "T2" fieldNames [encode e0 a0, encode e4 a4, ...])
-makeConstructorsEncoder :: [Con] -> ExpQ
-makeConstructorsEncoder cs = do
-  -- get the types of all the fields of all the constructors
-  ts <- nub . join <$> for cs typesOf
-  constructorsNames <- for cs nameOf
-  let options = sigP (varP (mkName "os")) (conT $ mkName "Options")
-  let encoderParameters = options : ((\(t, n) -> sigP (varP (mkName $ "e" <> show n)) (appT (conT $ mkName "Encoder") (pure t))) <$> zip ts [0 ..])
-  matchClauses <- for cs $ makeMatchClause constructorsNames ts
-  lamE encoderParameters (appE (conE (mkName "Encoder")) (lamCaseE (pure <$> matchClauses)))
+-- * BUILDING ENCODERS
 
--- | Make the match clause for a constructor given
---    - the list of all the encoder types
---    - the constructor name
---    - the constructor index in the list of all the constructors for the encoded data type
---   T1 a0 a1 ... -> makeEncoderFromConstructor o (FromConstructor names types cName fieldNames values)
-makeMatchClause :: [Name] -> [Type] -> Con -> MatchQ
-makeMatchClause constructorNames allTypes c = do
-  ts <- typesOf c
-  constructorTypes <- indexConstructorTypes allTypes ts
-  cName <- dropQualified <$> nameOf c
-  let names = listE $ litE . StringL . show . dropQualified <$> constructorNames
-  let types = listE $ litE . StringL . show <$> allTypes
-  fields <- fieldsOf c
-  let fieldNames = listE $ litE . StringL . show . dropQualified <$> fields
-  let params = conP (mkName $ show cName) $ (\(_, n) -> varP (mkName $ "a" <> show n)) <$> constructorTypes
-  let values = listE $ (\(_, n) -> appE (appE (varE $ mkName "encode") (varE (mkName $ "e" <> show n))) (varE (mkName $ "a" <> show n))) <$> constructorTypes
-  let encoded =
-        varE (mkName "makeEncoderFromConstructor")
-          `appE` varE (mkName "os")
-          `appE` (conE (mkName "FromConstructor") `appE` names `appE` types `appE` litE (StringL $ show cName) `appE` fieldNames `appE` values)
-  match params (normalB encoded) []
+-- | A ConstructorEncoder uses configuration options + type information extracted from
+--   a given data type (with TemplateHaskell) in order to produce a Value and an Encoding
+newtype ConstructorEncoder = ConstructorEncoder
+  { encodeConstructor :: Options -> FromConstructor -> (Value, Encoding)
+  }
+
+-- | Default implementation, it can be overridden in a registry
+defaultConstructorEncoder :: ConstructorEncoder
+defaultConstructorEncoder = ConstructorEncoder makeEncoderFromConstructor
 
 -- | Minimum set of data extracted from a given type with Template Haskell
 --   in order to create the appropriate encoder given an Options value
@@ -172,20 +139,6 @@ data FromConstructor = FromConstructor
     fromConstructorValues :: [(Value, Encoding)]
   }
   deriving (Eq, Show)
-
--- | Apply Options to the constructor name + field names
---   and remove Nothing values if necessary
-modifyFromConstructorWithOptions :: Options -> FromConstructor -> FromConstructor
-modifyFromConstructorWithOptions options fc = do
-  let (fn, fv) =
-        if omitNothingFields options && length (fromConstructorFieldNames fc) == length (fromConstructorValues fc)
-          then unzip $ filter ((/= Null) . fst . snd) $ zip (fromConstructorFieldNames fc) (fromConstructorValues fc)
-          else (fromConstructorFieldNames fc, fromConstructorValues fc)
-  fc
-    { fromConstructorName = toS . constructorTagModifier options . toS $ fromConstructorName fc,
-      fromConstructorFieldNames = toS . fieldLabelModifier options . toS <$> fn,
-      fromConstructorValues = fv
-    }
 
 -- | Make an Encoder from Options and the representation of a constructor for a given value to encode
 makeEncoderFromConstructor :: Options -> FromConstructor -> (Value, Encoding)
@@ -211,11 +164,9 @@ makeEncoderFromConstructor options fromConstructor = do
                 else valuesToObject names values
             _ ->
               if null names
-                then case values of
-                  [v] -> v
-                  _ -> do
-                    let (vs, es) = unzip values
-                    (array vs, list identity es)
+                then do
+                  let (vs, es) = unzip values
+                  (array vs, list identity es)
                 else valuesToObject names values
     -- sum constructor
     _ ->
@@ -294,6 +245,20 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
               ( Object . KM.fromList $ (K.fromText $ toS tagFieldName, String constructorTag) : zip fieldNamesKeys vs,
                 pairs (foldMap identity $ pair (K.fromText $ toS tagFieldName) (string $ toS constructorTag) : (uncurry pair <$> zip fieldNamesKeys es))
                 )
+
+-- | Apply Options to the constructor name + field names
+--   and remove Nothing values if necessary
+modifyFromConstructorWithOptions :: Options -> FromConstructor -> FromConstructor
+modifyFromConstructorWithOptions options fc = do
+  let (fn, fv) =
+        if omitNothingFields options && length (fromConstructorFieldNames fc) == length (fromConstructorValues fc)
+          then unzip $ filter ((/= Null) . fst . snd) $ zip (fromConstructorFieldNames fc) (fromConstructorValues fc)
+          else (fromConstructorFieldNames fc, fromConstructorValues fc)
+  fc
+    { fromConstructorName = toS . constructorTagModifier options . toS $ fromConstructorName fc,
+      fromConstructorFieldNames = toS . fieldLabelModifier options . toS <$> fn,
+      fromConstructorValues = fv
+    }
 
 -- | Create an Object from a list of field names and a list of Values
 --   both as a Value and as an Encoding

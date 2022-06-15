@@ -3,10 +3,10 @@
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
 {-
-  TemplateHaskell functions
+  TemplateHaskell utility functions to create encoders and decoders
 -}
 
-module Data.Registry.Aeson.TH where
+module Data.Registry.Aeson.TH.TH where
 
 import Control.Monad.Fail
 import Data.List (elemIndex)

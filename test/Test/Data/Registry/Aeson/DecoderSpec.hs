@@ -176,7 +176,7 @@ decoders =
     <: jsonDecoder @Text
     <: decodeMaybeOf @Int
     <: jsonDecoder @Int
-    <: val defaultOptions
+    <: defaultDecoderOptions
 
 utcTimeDecoder :: Decoder UTCTime
 utcTimeDecoder = Decoder $ \case

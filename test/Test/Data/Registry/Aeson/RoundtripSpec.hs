@@ -133,7 +133,7 @@ encoders =
     <: jsonEncoder @String
     <: jsonEncoder @Int
     <: jsonEncoder @Bool
-    <: val defaultOptions
+    <: defaultEncoderOptions
 
 -- Decoders
 
@@ -177,7 +177,7 @@ decoders =
     <: jsonDecoder @String
     <: jsonDecoder @Int
     <: jsonDecoder @Bool
-    <: val defaultOptions
+    <: defaultDecoderOptions
 
 -- Generators
 
