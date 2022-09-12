@@ -21,7 +21,7 @@ By doing so we get all the advantages from using `registry`:
 #### Example
 
 Here is an example of creating encoders for a set of related data types:
-```
+```haskell
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedLists #-}
@@ -68,7 +68,7 @@ In the code above most encoders are created with `TemplateHaskell` and the `make
  - retrieved from a `Aeson` instance: `jsonEncoder @Text`, `jsonEncoder @Int`
 
 Given the list of `encoders` an `Encoder Person` can be retrieved with:
-```
+```haskell
 let encoderPerson = make @(Encoder Person) encoders
 let encoded = encodeValue encoderPerson (Person (Identifier 123) (Email "me@here.com")) :: Value
 ```
@@ -84,7 +84,7 @@ __NOTE__ this function does not support recursive data types (and much less mutu
 #### Example
 
 Here is an example of creating decoders for a set of related data types:
-```
+```haskell
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedLists #-}
@@ -134,7 +134,7 @@ In the code above most decoders are created with `TemplateHaskell` and the `make
  - retrieved from a `Aeson` instance: `jsonDecoder @Text`, `jsonDecoder @Int`
 
 Given the list of `Decoders` an `Decoder Person` can be retrieved with:
-```
+```haskell
 let decoderPerson = make @(Decoder Person) decoders
 let decoded = decode decoderPerson $ ObjectArray [Number 123, ObjectStr "me@here.com"]
 ```
@@ -144,7 +144,7 @@ let decoded = decode decoderPerson $ ObjectArray [Number 123, ObjectStr "me@here
 There is a bit of flexibility in the way encoders are created with TemplateHaskell.
 
 A custom `ConstructorsEncoder` can be added to the registry to tweak the generation:
-```
+```haskell
 newtype ConstructorEncoder = ConstructorEncoder
   { encodeConstructor :: Options -> FromConstructor -> (Value, Encoding)
   }
@@ -157,7 +157,7 @@ If necessary you can provide your own options and reuse the default function to 
 #### Generated decoders
 
 The `makeDecoder` function makes the following functions:
-```
+```haskell
 -- makeDecoder ''Identifier
 \(d::Decoder Int) -> Decoder $ \o -> Identifier <$> decode d o
 
@@ -184,7 +184,7 @@ __NOTE__ this function does not support recursive data types (and much less mutu
 There is a bit of flexibility in the way decoders are created with TemplateHaskell.
 
 A custom `ConstructorsDecoder` can be added to the registry to tweak the generation:
-```
+```haskell
 newtype ConstructorsDecoder = ConstructorsDecoder
   { decodeConstructors :: Options -> [ConstructorDef] -> Value -> Either Text [ToConstructor]
   }
