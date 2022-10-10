@@ -22,7 +22,6 @@ import qualified Data.ByteString.Lazy as BL
 import Data.List ((\\))
 import Data.Registry
 import Data.Registry.Aeson.TH.Decoder
-import Data.Registry.Internal.Types hiding (Value)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as Vector

@@ -22,7 +22,6 @@ import qualified Data.ByteString.Lazy as BL (toStrict)
 import Data.Functor.Contravariant
 import Data.Registry
 import Data.Registry.Aeson.TH.Encoder
-import Data.Registry.Internal.Types hiding (Value)
 import qualified Data.Vector as V
 import Protolude hiding (Type, list)
 
