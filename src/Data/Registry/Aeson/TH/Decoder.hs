@@ -90,9 +90,9 @@ makeConstructorsDecoder thOptions typeName cs = do
 makeMatchClause :: ThOptions -> Name -> [Type] -> Con -> MatchQ
 makeMatchClause thOptions typeName allTypes c = do
   ts <- typesOf c
-  constructorTypes <- fmap (\(_,_,k) -> k) <$> indexConstructorTypes allTypes ts
+  constructorTypes <- fmap (\(_,n,k) -> (n, k)) <$> indexConstructorTypes allTypes ts
   cName <- makeName thOptions <$> nameOf c
-  let fieldsP = listP $ (\i -> varP $ mkName ("v" <> P.show i)) <$> constructorTypes
+  let fieldsP = listP $ (\(n, _) -> varP $ mkName ("v" <> P.show n)) <$> constructorTypes
   match
     (conP (mkName "ToConstructor") [litP (StringL . P.show $ cName), fieldsP])
     (normalB (applyDecoder thOptions typeName cName constructorTypes))
@@ -107,15 +107,15 @@ makeErrorClause typeName = do
   match (varP $ mkName "_1") (normalB (appE (conE $ mkName "Left") errorMessage)) []
 
 -- ConstructorName <$> decodeFieldValue d1 o1 <*> decodeFieldValue d2 o2 ...
-applyDecoder :: ThOptions -> Name -> Name -> [Int] -> ExpQ
+applyDecoder :: ThOptions -> Name -> Name -> [(Int, Int)] -> ExpQ
 applyDecoder _thOptions _typeName cName [] = appE (varE $ mkName "pure") (conE cName)
-applyDecoder thOptions typeName cName (n : ns) = do
+applyDecoder thOptions typeName cName (nk : nks) = do
   let cons = appE (varE $ mkName "pure") (conE cName)
-  foldr (\i r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i) (appE (appE (varE (mkName "ap")) cons) $ decodeAt n) (reverse ns)
+  foldr (\i r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i) (appE (appE (varE (mkName "ap")) cons) $ decodeAt nk) (reverse nks)
   where
-    decodeAt i =
+    decodeAt (n, k) =
       varE (mkName "decodeFieldValue")
-        `appE` varE (mkName ("d" <> P.show i))
+        `appE` varE (mkName ("d" <> P.show k))
         `appE` (litE . StringL . P.show . makeName thOptions $ typeName)
         `appE` (litE . StringL . P.show . makeName thOptions $ cName)
-        `appE` varE (mkName ("v" <> P.show i))
+        `appE` varE (mkName ("v" <> P.show n))

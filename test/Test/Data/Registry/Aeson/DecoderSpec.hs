@@ -124,6 +124,11 @@ test_reject_unknown_fields = test "rejectUnknownFields" $ do
     "{'InPerson':[{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]}"
     "Cannot decode the type 'Delivery' >> (InPerson) unknown fields: f1, f2"
 
+test_types_th_index_error = test "error with TH when 2 fields have the same type" $ do
+  -- this code did not compile before
+  let _ = $(makeDecoder ''Stats) <: jsonDecoder @Int <: defaultDecoderOptions
+  success
+
 test_decode_map = test "decode map" $ do
   let ds =
         decodeMapOf @Name @Int
