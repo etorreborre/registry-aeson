@@ -17,6 +17,7 @@ module Data.Registry.Aeson.Decoder
 where
 
 import Data.Aeson
+import Data.Map qualified as M
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
@@ -49,6 +50,11 @@ decoderAp (Decoder da) (Decoder db) = Decoder $ \case
       [] -> (,) <$> da o <*> db o
   o -> (,) <$> da o <*> db o
 
+newtype KeyDecoder a = KeyDecoder {decodeKeyAs :: Key -> Either Text a}
+
+instance Functor KeyDecoder where
+  fmap f (KeyDecoder d) = KeyDecoder (fmap f . d)
+
 -- * DECODING
 
 -- | Use a Decoder to decode a ByteString into the desired type
@@ -60,6 +66,15 @@ decodeByteString d bs =
       case decodeValue d v of
         Right a -> pure a
         Left e -> Left $ "Cannot decode the type '" <> toS (showType @a) <> "' >> " <> e
+
+-- * CREATING KEY DECODERS
+
+-- | Create a decoder for a key which can be read from text
+decodeKey :: forall a. (Typeable a) => (Text -> Either Text a) -> Typed (KeyDecoder a)
+decodeKey f = fun (keyDecoder f)
+
+keyDecoder :: forall a. (Text -> Either Text a) -> KeyDecoder a
+keyDecoder f = KeyDecoder $ f . K.toText
 
 -- * CREATING DECODERS
 
@@ -124,6 +139,14 @@ listOfDecoder (Decoder a) = Decoder $ \case
   Array vs -> for (toList vs) a
   _ -> Left . toS $ "not a list of " <> showType @a
 
+decodeMapOf :: forall a b. (Typeable a, Ord a, Typeable b) => Typed (KeyDecoder a -> Decoder b -> Decoder (Map a b))
+decodeMapOf = fun (mapOfDecoder @a @b)
+
+mapOfDecoder :: forall a b. (Typeable a, Ord a, Typeable b) => KeyDecoder a -> Decoder b -> Decoder (Map a b)
+mapOfDecoder (KeyDecoder a) (Decoder b) = Decoder $ \case
+  Object vs -> M.fromList <$> for (KM.toList vs) (\(k, v) -> (,) <$> a k <*> b v)
+  _ -> Left . toS $ "not a map of " <> showType @a <> " " <> showType @b
+
 -- | Add a Decoder (NonEmpty a) to a registry of decoders
 --   usage: decoders = decodeNonEmptyOf @a <: otherDecoders
 --   the list of otherDecoders must contain a Decoder a
@@ -147,7 +170,15 @@ showType = P.show (typeRep (Proxy :: Proxy a))
 defaultDecoderOptions :: Registry _ _
 defaultDecoderOptions =
   fun defaultConstructorsDecoder
+    <: fun textKeyDecoder
+    <: fun stringKeyDecoder
     <: val defaultOptions
+
+textKeyDecoder :: KeyDecoder Text
+textKeyDecoder = keyDecoder Right
+
+stringKeyDecoder :: KeyDecoder String
+stringKeyDecoder = keyDecoder (Right . toS)
 
 -- * TEMPLATE HASKELL
 

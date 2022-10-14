@@ -21,11 +21,13 @@ import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL (toStrict)
 import Data.Functor.Contravariant
+import Data.Map qualified as M
 import Data.Registry
 import Data.Registry.Aeson.TH.Encoder
 import Data.Registry.Aeson.TH.ThOptions
 import Data.Vector qualified as V
 import Protolude hiding (Type, list)
+import Prelude (String)
 
 -- * ENCODER DATA TYPE
 
@@ -34,6 +36,11 @@ newtype Encoder a = Encoder {encode :: a -> (Value, Encoding)}
 instance Contravariant Encoder where
   contramap f (Encoder a) = Encoder (a . f)
 
+newtype KeyEncoder a = KeyEncoder {encodeAsKey :: a -> Key}
+
+instance Contravariant KeyEncoder where
+  contramap f (KeyEncoder a) = KeyEncoder (a . f)
+
 -- * ENCODE VALUES
 
 encodeByteString :: Encoder a -> a -> ByteString
@@ -41,6 +48,15 @@ encodeByteString (Encoder e) = BL.toStrict . encodingToLazyByteString . snd . e
 
 encodeValue :: Encoder a -> a -> Value
 encodeValue (Encoder e) = fst . e
+
+-- * CREATE KEY ENCODERS
+
+-- | Make a key encoder from a function returning some text
+encodeKey :: forall a. Typeable a => (a -> Text) -> Typed (KeyEncoder a)
+encodeKey f = fun (keyEncoder f)
+
+keyEncoder :: (a -> Text) -> KeyEncoder a
+keyEncoder f = KeyEncoder $ K.fromString . toS . f
 
 -- * CREATE ENCODERS
 
@@ -95,6 +111,16 @@ listOfEncoder (Encoder ea) = Encoder $ \as -> do
   let (ls1, ls2) = unzip (ea <$> as)
   (array ls1, list identity ls2)
 
+-- | Create an Encoder for a map a b
+encodeMapOf :: forall a b. (Typeable a, Typeable b) => Typed (KeyEncoder a -> Encoder b -> Encoder (Map a b))
+encodeMapOf = fun (mapOfEncoder @a @b)
+
+mapOfEncoder :: KeyEncoder a -> Encoder b -> Encoder (Map a b)
+mapOfEncoder ea (Encoder eb) = Encoder $ \ms -> do
+  let ks = encodeAsKey ea <$> M.keys ms
+  let (vs1, vs2) = unzip (eb <$> toList ms)
+  (Object $ KM.fromList $ zip ks vs1, pairs $ foldMap (uncurry pair) (zip ks vs2))
+
 -- | Create an Encoder for a non-empty list (NonEmpty a)
 encodeNonEmptyOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder (NonEmpty a))
 encodeNonEmptyOf = fun (nonEmptyOfEncoder @a)
@@ -111,7 +137,15 @@ array = Array . V.fromList
 defaultEncoderOptions :: Registry _ _
 defaultEncoderOptions =
   fun defaultConstructorEncoder
+    <: fun textKeyEncoder
+    <: fun stringKeyEncoder
     <: val defaultOptions
+
+textKeyEncoder :: KeyEncoder Text
+textKeyEncoder = KeyEncoder K.fromText
+
+stringKeyEncoder :: KeyEncoder String
+stringKeyEncoder = KeyEncoder K.fromString
 
 -- * BUILDING ENCODERS
 
@@ -267,4 +301,4 @@ valuesToObject :: [Text] -> [(Value, Encoding)] -> (Value, Encoding)
 valuesToObject fieldNames values = do
   let (vs, es) = unzip values
   let fieldNamesKeys = K.fromText <$> fieldNames
-  (Object $ KM.fromList (zip fieldNamesKeys vs), pairs $ foldMap identity (uncurry pair <$> zip fieldNamesKeys es))
+  (Object $ KM.fromList (zip fieldNamesKeys vs), pairs $ foldMap (uncurry pair) (zip fieldNamesKeys es))

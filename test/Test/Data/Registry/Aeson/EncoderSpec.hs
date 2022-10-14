@@ -10,8 +10,6 @@ module Test.Data.Registry.Aeson.EncoderSpec where
 import Data.Aeson hiding (encode)
 import Data.Aeson qualified as A
 import Data.ByteString.Lazy qualified as BL (fromStrict, toStrict)
-import Data.Functor.Contravariant
-import Data.Map qualified as M
 import Data.Registry
 import Data.Registry.Aeson.Encoder
 import Data.Text qualified as T
@@ -63,6 +61,18 @@ test_types_th_index_error = test "error with TH when 2 fields have the same type
   -- this code did not compile before
   let _ = $(makeEncoder ''Stats) <: jsonEncoder @Int <: defaultEncoderOptions
   success
+
+test_encode_map = test "encode maps" $ do
+  let es =
+        encodeMapOf @Name @Int
+          <: jsonEncoder @Int
+          <: jsonEncoder @Text
+          <: encodeKey _name
+          <: defaultEncoderOptions
+  let bs = encodeByteString (make @(Encoder (Map Name Int)) es) [("name1", 1), ("name2", 2)]
+
+  -- we check both the encoding and the application of the Options for
+  checkValue bs "{\"name1\":1,\"name2\":2}"
 
 -- * HELPERS
 

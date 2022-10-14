@@ -1,16 +1,17 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
 module Test.Data.Registry.Aeson.DecoderSpec where
 
 import Data.Aeson hiding (decode)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.Lazy as BL (ByteString, fromStrict)
+import Data.Aeson qualified as A
+import Data.ByteString.Lazy qualified as BL (ByteString, fromStrict)
 import Data.Registry
 import Data.Registry.Aeson.Decoder
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Time
 import Protolude
 import Test.Data.Registry.Aeson.DataTypes
@@ -122,6 +123,18 @@ test_reject_unknown_fields = test "rejectUnknownFields" $ do
     reject {sumEncoding = ObjectWithSingleField}
     "{'InPerson':[{'email':{'_email':'me@here.com'},'identifier':123,'f1':1,'f2':1},{'_datetime':'2022-04-18T00:00:12Z'}]}"
     "Cannot decode the type 'Delivery' >> (InPerson) unknown fields: f1, f2"
+
+test_decode_map = test "decode map" $ do
+  let ds =
+        decodeMapOf @Name @Int
+          <: decodeKey (Right . Name)
+          <: jsonDecoder @Int
+          <: jsonDecoder @Text
+          <: defaultDecoderOptions
+
+  case decodeByteString (make @(Decoder (Map Name Int)) ds) "{\"name1\":1,\"name2\":2}" of
+    Left e -> annotateShow e >> failure
+    Right a -> a === [("name1", 1), ("name2", 2)]
 
 -- * HELPERS
 

@@ -4,6 +4,7 @@
 module Test.Data.Registry.Aeson.DataTypes where
 
 import Data.Aeson
+import Data.String
 import Data.Time
 import Protolude
 
@@ -174,7 +175,13 @@ instance ToJSON TwoElemArraySumEncoding where
 instance FromJSON TwoElemArraySumEncoding where
   parseJSON = genericParseJSON twoElemArraySumEncodingOptions
 
-data Stats = Stats {
-  s1 :: Int,
-  s2 :: Int
-} deriving (Eq, Show)
+data Stats = Stats
+  { s1 :: Int,
+    s2 :: Int
+  }
+  deriving (Eq, Show)
+
+newtype Name = Name {_name :: Text} deriving (Eq, Show, Ord)
+
+instance IsString Name where
+  fromString = Name . toS
