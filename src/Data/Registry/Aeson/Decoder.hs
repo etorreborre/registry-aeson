@@ -17,14 +17,15 @@ module Data.Registry.Aeson.Decoder
 where
 
 import Data.Aeson
-import Data.Map qualified as M
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
 import Data.List ((\\))
+import Data.Map qualified as M
 import Data.Registry
 import Data.Registry.Aeson.TH.Decoder
 import Data.Registry.Aeson.TH.ThOptions
+import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Vector qualified as Vector
@@ -126,6 +127,15 @@ tripleOfDecoder :: forall a b c. (Typeable a, Typeable b, Typeable c) => Decoder
 tripleOfDecoder (Decoder a) (Decoder b) (Decoder c) = Decoder $ \case
   Array [oa, ob, oc] -> (,,) <$> a oa <*> b ob <*> c oc
   _ -> Left . toS $ "not a triple of " <> showType @a <> "," <> showType @b <> "," <> showType @c
+
+-- | Add a Decoder (Set a)
+decodeSetOf :: forall a. (Typeable a, Ord a) => Typed (Decoder a -> Decoder (Set a))
+decodeSetOf = fun (setOfDecoder @a)
+
+setOfDecoder :: forall a. (Typeable a, Ord a) => Decoder a -> Decoder (Set a)
+setOfDecoder (Decoder a) = Decoder $ \case
+  Array vs -> S.fromList <$> for (toList vs) a
+  _ -> Left . toS $ "not a set of " <> showType @a
 
 -- | Add a Decoder [a] to a registry of decoders
 --   usage: decoders = decodeListOf @a <: otherDecoders

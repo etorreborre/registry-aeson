@@ -25,6 +25,7 @@ import Data.Map qualified as M
 import Data.Registry
 import Data.Registry.Aeson.TH.Encoder
 import Data.Registry.Aeson.TH.ThOptions
+import Data.Set qualified as S
 import Data.Vector qualified as V
 import Protolude hiding (Type, list)
 import Prelude (String)
@@ -101,6 +102,15 @@ tripleOfEncoder (Encoder ea) (Encoder eb) (Encoder ec) =
   Encoder $ \(a, b, c) -> do
     let (ls1, ls2) = unzip [ea a, eb b, ec c]
     (array ls1, list identity ls2)
+
+-- | Create an Encoder for a Set a
+encodeSetOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder (Set a))
+encodeSetOf = fun (setOfEncoder @a)
+
+setOfEncoder :: Encoder a -> Encoder (Set a)
+setOfEncoder (Encoder ea) = Encoder $ \as -> do
+  let (ls1, ls2) = unzip (ea <$> S.toList as)
+  (array ls1, list identity ls2)
 
 -- | Create an Encoder for a list [a]
 encodeListOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder [a])
