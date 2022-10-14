@@ -11,18 +11,20 @@
 module Data.Registry.Aeson.Encoder
   ( module Data.Registry.Aeson.Encoder,
     module Data.Registry.Aeson.TH.Encoder,
+    module Data.Registry.Aeson.TH.ThOptions,
   )
 where
 
 import Data.Aeson
 import Data.Aeson.Encoding.Internal
-import qualified Data.Aeson.Key as K
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.ByteString.Lazy as BL (toStrict)
+import Data.Aeson.Key qualified as K
+import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as BL (toStrict)
 import Data.Functor.Contravariant
 import Data.Registry
 import Data.Registry.Aeson.TH.Encoder
-import qualified Data.Vector as V
+import Data.Registry.Aeson.TH.ThOptions
+import Data.Vector qualified as V
 import Protolude hiding (Type, list)
 
 -- * ENCODER DATA TYPE
@@ -201,7 +203,7 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
           case (vs, es) of
             ([v], [e])
               | unwrapUnaryRecords options ->
-                (array [String constructorTag, v], list identity [string $ toS constructorTag, e])
+                  (array [String constructorTag, v], list identity [string $ toS constructorTag, e])
             _ -> do
               let (vs', es') = valuesToObject fieldNames values
               (array [String constructorTag, vs'], list identity [string $ toS constructorTag, es'])
@@ -218,7 +220,7 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
           case (vs, es) of
             ([v], [e])
               | unwrapUnaryRecords options ->
-                (Object $ KM.singleton (K.fromText constructorTag) v, pairs (pair (K.fromText constructorTag) e))
+                  (Object $ KM.singleton (K.fromText constructorTag) v, pairs (pair (K.fromText constructorTag) e))
             _ -> do
               let (vs', es') = valuesToObject fieldNames values
               (Object $ KM.singleton (K.fromText constructorTag) vs', pairs (pair (K.fromText constructorTag) es'))

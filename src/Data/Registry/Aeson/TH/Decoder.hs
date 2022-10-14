@@ -1,8 +1,10 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
+
 module Data.Registry.Aeson.TH.Decoder where
 
 import Control.Monad.Fail
 import Data.List (nub)
+import Data.Registry.Aeson.TH.ThOptions
 import Data.Registry.Aeson.TH.TH
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
@@ -13,20 +15,39 @@ import Protolude as P hiding (Type)
   build a Decoder based on configuration options
 -}
 
--- | Make a Decoder for a given data type
---   Usage: $(makeDecoder ''MyDataType <: otherDecoders)
+-- | Make an Encoder for a given data type
+--   Usage: $(makeDecoder ''MyDataType <: otherEncoders)
 makeDecoder :: Name -> ExpQ
-makeDecoder typeName = appE (varE $ mkName "fun") $ do
+makeDecoder = makeDecoderWith defaultThOptions
+
+-- | Make an Encoder for a given data type, where all types names are qualified with their module full name
+--    -- MyDataType is defined in X.Y.Z
+--    import X.Y.Z qualified
+--    $(makeDecoderQualified ''MyDataType <: otherEncoders)
+makeDecoderQualified :: Name -> ExpQ
+makeDecoderQualified = makeDecoderWith (ThOptions qualified)
+
+-- | Make an Encoder for a given data type, where all types names are qualified with their module name
+--    -- MyDataType is defined in X.Y.Z
+--    import X.Y.Z qualified as Z
+--    $(makeDecoderQualifiedLast ''MyDataType <: otherEncoders)
+makeDecoderQualifiedLast :: Name -> ExpQ
+makeDecoderQualifiedLast = makeDecoderWith (ThOptions qualifyWithLastName)
+
+-- | Make a Decoder for a given data type and pass options to specify how names must be qualified
+--   Usage: $(makeDecoderWith options ''MyDataType <: otherDecoders)
+makeDecoderWith :: ThOptions -> Name -> ExpQ
+makeDecoderWith thOptions typeName = appE (varE $ mkName "fun") $ do
   info <- reify typeName
   case info of
     TyConI (NewtypeD _context _name _typeVars _kind constructor _deriving) ->
-      makeConstructorsDecoder typeName [constructor]
+      makeConstructorsDecoder thOptions typeName [constructor]
     TyConI (DataD _context _name _typeVars _kind constructors _deriving) -> do
       case constructors of
         [] -> do
           qReport True "can not make an Decoder for an empty data type"
           fail "decoders creation failed"
-        _ -> makeConstructorsDecoder typeName constructors
+        _ -> makeConstructorsDecoder thOptions typeName constructors
     other -> do
       qReport True ("can only create decoders for an ADT, got: " <> P.show other)
       fail "decoders creation failed"
@@ -48,33 +69,33 @@ makeDecoder typeName = appE (varE $ mkName "fun") $ do
 --
 --   The \case function is the only one which needs to be generated in order to match the exact shape of the
 --   constructors to instantiate
-makeConstructorsDecoder :: Name -> [Con] -> ExpQ
-makeConstructorsDecoder typeName cs = do
+makeConstructorsDecoder :: ThOptions -> Name -> [Con] -> ExpQ
+makeConstructorsDecoder thOptions typeName cs = do
   ts <- nub . join <$> for cs typesOf
   let decoderParameters = sigP (varP (mkName "os")) (conT $ mkName "Options") : sigP (varP (mkName "cd")) (conT $ mkName "ConstructorsDecoder") : ((\(t, n) -> sigP (varP (mkName $ "d" <> P.show n)) (appT (conT $ mkName "Decoder") (pure t))) <$> zip ts [0 ..])
   -- makeToConstructors os [Constructor "T1" ["f1", "f2"], Constructor "T2" []] v
   let paramP = varP (mkName "v")
   constructorDefs <- for cs $ \c -> do
-    cName <- dropQualified <$> nameOf c
-    fields <- fmap (litE . StringL . P.show . dropQualified) <$> fieldsOf c
-    fieldTypes <- fmap (litE . StringL . P.show . getSimpleTypeName) <$> typesOf c
+    cName <- makeName thOptions <$> nameOf c
+    fields <- fmap (litE . StringL . P.show . makeName thOptions) <$> fieldsOf c
+    fieldTypes <- fmap (litE . StringL . P.show . getSimpleTypeName thOptions) <$> typesOf c
     varE (mkName "makeConstructorDef") `appE` (litE . StringL $ P.show cName) `appE` listE fields `appE` listE fieldTypes
-  let matchClauses = makeMatchClause typeName ts <$> cs
+  let matchClauses = makeMatchClause thOptions typeName ts <$> cs
   let matchFunction = lamCaseE (matchClauses <> [makeErrorClause typeName])
   let resolveFunction = varE (mkName "decodeFromDefinitions") `appE` varE (mkName "os") `appE` varE (mkName "cd") `appE` listE (pure <$> constructorDefs) `appE` varE (mkName "v") `appE` matchFunction
   lamE decoderParameters (appE (conE (mkName "Decoder")) (lamE [paramP] resolveFunction))
 
 -- | Decode the nth constructor of a data type
 --    ToConstructor "T1" [v1, v2]-> T1 <$> d1 v1 <*> d2 v2 ...
-makeMatchClause :: Name -> [Type] -> Con -> MatchQ
-makeMatchClause typeName allTypes c = do
+makeMatchClause :: ThOptions -> Name -> [Type] -> Con -> MatchQ
+makeMatchClause thOptions typeName allTypes c = do
   ts <- typesOf c
   constructorTypes <- fmap snd <$> indexConstructorTypes allTypes ts
-  cName <- dropQualified <$> nameOf c
+  cName <- makeName thOptions <$> nameOf c
   let fieldsP = listP $ (\i -> varP $ mkName ("v" <> P.show i)) <$> constructorTypes
   match
     (conP (mkName "ToConstructor") [litP (StringL . P.show $ cName), fieldsP])
-    (normalB (applyDecoder typeName cName constructorTypes))
+    (normalB (applyDecoder thOptions typeName cName constructorTypes))
     []
 
 -- | Return an error the json value cannot be decoded with a constructor name and some values
@@ -86,14 +107,15 @@ makeErrorClause typeName = do
   match (varP $ mkName "_1") (normalB (appE (conE $ mkName "Left") errorMessage)) []
 
 -- ConstructorName <$> decodeFieldValue d1 o1 <*> decodeFieldValue d2 o2 ...
-applyDecoder :: Name -> Name -> [Int] -> ExpQ
-applyDecoder _typeName cName [] = appE (varE $ mkName "pure") (conE cName)
-applyDecoder typeName cName (n : ns) = do
+applyDecoder :: ThOptions -> Name -> Name -> [Int] -> ExpQ
+applyDecoder _thOptions _typeName cName [] = appE (varE $ mkName "pure") (conE cName)
+applyDecoder thOptions typeName cName (n : ns) = do
   let cons = appE (varE $ mkName "pure") (conE cName)
   foldr (\i r -> appE (appE (varE (mkName "ap")) r) $ decodeAt i) (appE (appE (varE (mkName "ap")) cons) $ decodeAt n) (reverse ns)
   where
     decodeAt i =
-      varE (mkName "decodeFieldValue") `appE` varE (mkName ("d" <> P.show i))
-        `appE` (litE . StringL . P.show . dropQualified $ typeName)
-        `appE` (litE . StringL . P.show . dropQualified $ cName)
+      varE (mkName "decodeFieldValue")
+        `appE` varE (mkName ("d" <> P.show i))
+        `appE` (litE . StringL . P.show . makeName thOptions $ typeName)
+        `appE` (litE . StringL . P.show . makeName thOptions $ cName)
         `appE` varE (mkName ("v" <> P.show i))

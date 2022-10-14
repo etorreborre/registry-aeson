@@ -12,19 +12,21 @@
 module Data.Registry.Aeson.Decoder
   ( module Data.Registry.Aeson.Decoder,
     module Data.Registry.Aeson.TH.Decoder,
+    module Data.Registry.Aeson.TH.ThOptions,
   )
 where
 
 import Data.Aeson
-import qualified Data.Aeson.Key as K
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.ByteString.Lazy as BL
+import Data.Aeson.Key qualified as K
+import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as BL
 import Data.List ((\\))
 import Data.Registry
 import Data.Registry.Aeson.TH.Decoder
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Vector as Vector
+import Data.Registry.Aeson.TH.ThOptions
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
+import Data.Vector qualified as Vector
 import Protolude as P hiding (Type)
 import Prelude (String, show)
 
@@ -242,7 +244,7 @@ makeToConstructors options cs value = do
       -- if there is only one constructor and tagging is not required (and nullary constructors must be tagged)
       [c]
         | not (tagSingleConstructors options) && not (isEnumeration && not (allNullaryToStringTag options)) ->
-          pure <$> makeToConstructorFromValue options c value
+            pure <$> makeToConstructorFromValue options c value
       _ -> do
         maybe (pure ()) Left $ checkSumEncoding options constructors value
         case sumEncoding options of
@@ -268,34 +270,34 @@ makeTaggedObject options tagFieldName contentsFieldName constructors value =
               -- constructor with no fields
               ([], [], [])
                 | tagValue == String modifiedConstructorName ->
-                  pure $ ToConstructor constructorName []
+                    pure $ ToConstructor constructorName []
               -- constructor with one unnamed field
               ([], [], [_])
                 | tagValue == String modifiedConstructorName ->
-                  case KM.lookup (K.fromText contentsFieldName) vs of
-                    Just fieldValue -> pure $ ToConstructor constructorName [(Nothing, fieldValue)]
-                    Nothing -> Left $ "field " <> contentsFieldName <> " not found"
+                    case KM.lookup (K.fromText contentsFieldName) vs of
+                      Just fieldValue -> pure $ ToConstructor constructorName [(Nothing, fieldValue)]
+                      Nothing -> Left $ "field " <> contentsFieldName <> " not found"
               -- constructor with one named field
               ([modifiedFieldName], [fieldName], [fieldType])
                 | tagValue == String modifiedConstructorName ->
-                  case KM.lookup (K.fromText modifiedFieldName) vs of
-                    Just fieldValue -> pure $ ToConstructor constructorName [(Just (fieldName, fieldType), fieldValue)]
-                    Nothing -> Left $ "field " <> modifiedFieldName <> " not found"
+                    case KM.lookup (K.fromText modifiedFieldName) vs of
+                      Just fieldValue -> pure $ ToConstructor constructorName [(Just (fieldName, fieldType), fieldValue)]
+                      Nothing -> Left $ "field " <> modifiedFieldName <> " not found"
               -- constructor with at least one named field and possibly Nothing fields
               (_, _, _)
                 | tagValue == String modifiedConstructorName && omitNothingFields options && any (`elem` modifiedFieldNames) (K.toText <$> KM.keys vs) -> do
-                  let rest = KM.fromList $ filter ((/= tagFieldName) . K.toText . fst) $ KM.toList vs
-                  makeToConstructorFromValue options c (Object rest)
+                    let rest = KM.fromList $ filter ((/= tagFieldName) . K.toText . fst) $ KM.toList vs
+                    makeToConstructorFromValue options c (Object rest)
               -- constructor with several named fields
               (_, _ : _, _)
                 | tagValue == String modifiedConstructorName ->
-                  makeToConstructorFromValue options c value
+                    makeToConstructorFromValue options c value
               -- constructor with no named fields
               (_, _, _)
                 | tagValue == String modifiedConstructorName && any (== contentsFieldName) (K.toText <$> KM.keys vs) ->
-                  case KM.lookup (K.fromText contentsFieldName) vs of
-                    Just contentsValue -> makeToConstructorFromValue options c contentsValue
-                    _ -> Left $ "contents field not found '" <> contentsFieldName <> "'"
+                    case KM.lookup (K.fromText contentsFieldName) vs of
+                      Just contentsValue -> makeToConstructorFromValue options c contentsValue
+                      _ -> Left $ "contents field not found '" <> contentsFieldName <> "'"
               (_, _, _) ->
                 Left $ "failed to instantiate constructor: " <> P.show c
           Nothing ->
@@ -319,10 +321,10 @@ makeObjectWithSingleField options constructors value =
     case value of
       Object [(tagValue, contents)]
         | K.toText tagValue == modifiedConstructorName ->
-          makeToConstructorFromValue options c contents
+            makeToConstructorFromValue options c contents
       String v
         | v == modifiedConstructorName ->
-          makeToConstructorFromValue options c value
+            makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -334,10 +336,10 @@ makeTwoElemArray options constructors value =
     case value of
       Array [tagValue, contents]
         | tagValue == String modifiedConstructorName ->
-          makeToConstructorFromValue options c contents
+            makeToConstructorFromValue options c contents
       String v
         | v == modifiedConstructorName ->
-          makeToConstructorFromValue options c value
+            makeToConstructorFromValue options c value
       _ ->
         Left $ "failed to instantiate constructor: " <> P.show c
 
@@ -355,7 +357,7 @@ checkSumEncoding options constructors value = do
               Just $ "tag field '" <> tagFieldName <> "' not found"
             Just (String tagValue)
               | tagValue `elem` constructorModifiedNames ->
-                Nothing
+                  Nothing
             Just v ->
               unexpectedConstructor constructorModifiedNames v
         _ -> Just "expected an Object for a TaggedObject sum encoding"

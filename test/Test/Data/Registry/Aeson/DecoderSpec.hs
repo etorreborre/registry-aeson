@@ -14,6 +14,7 @@ import qualified Data.Text.Encoding as T
 import Data.Time
 import Protolude
 import Test.Data.Registry.Aeson.DataTypes
+import Test.Data.Registry.Aeson.SimilarDataTypes qualified as SimilarDataTypes
 import Test.Tasty.Hedgehogx hiding (either, maybe, text)
 
 test_decode = test "decode" $ do
@@ -158,6 +159,11 @@ decoders =
   $(makeDecoder ''Delivery)
     <: $(makeDecoder ''Team)
     <: decodeListOf @Person
+    -- test that it is possible to generate a Decoder when there are name clashes
+    <: $(makeDecoderQualifiedLast ''SimilarDataTypes.Person)
+    <: $(makeDecoderQualifiedLast ''SimilarDataTypes.Email)
+    <: $(makeDecoderQualifiedLast ''SimilarDataTypes.Identifier)
+    <: $(makeDecoderQualifiedLast ''SimilarDataTypes.DateTime)
     <: $(makeDecoder ''Person)
     <: $(makeDecoder ''Email)
     <: $(makeDecoder ''Identifier)

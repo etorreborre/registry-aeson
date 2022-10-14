@@ -1,5 +1,5 @@
 name: registry-aeson
-version: 0.2.2.0
+version: 0.2.3.0
 synopsis: Aeson encoders / decoders
 
 description: This library provides encoders / decoders which can be easily customized for the Aeson format.
@@ -14,6 +14,8 @@ license-file: LICENSE.txt
 maintainer: etorreborre@yahoo.com
 git: https://github.com/etorreborre/registry-aeson
 
+language: GHC2021
+
 ghc-options: -Wall
   -Wcompat
   -Wincomplete-record-updates
@@ -23,35 +25,19 @@ ghc-options: -Wall
   -optP-Wno-nonportable-include-path
 
 default-extensions:
-  - BangPatterns
   - DefaultSignatures
-  - EmptyCase
-  - ExistentialQuantification
-  - FlexibleContexts
-  - FlexibleInstances
+  - DerivingStrategies
   - FunctionalDependencies
   - GADTs
-  - DerivingVia
-  - DerivingStrategies
-  - InstanceSigs
-  - KindSignatures
   - LambdaCase
-  - MultiParamTypeClasses
   - MultiWayIf
-  - NamedFieldPuns
   - NoImplicitPrelude
   - OverloadedStrings
   - PatternSynonyms
-  - Rank2Types
-  - RankNTypes
-  - ScopedTypeVariables
-  - StandaloneDeriving
+  - StrictData
   - TemplateHaskell
-  - TupleSections
-  - TypeApplications
   - TypeFamilies
   - TypeFamilyDependencies
-  - TypeOperators
 
 dependencies:
   - base                 >= 4.7   && < 5

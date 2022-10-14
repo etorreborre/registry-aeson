@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
@@ -10,7 +11,7 @@ module Data.Registry.Aeson.TH.TH where
 
 import Control.Monad.Fail
 import Data.List (elemIndex)
-import qualified Data.Text as T
+import Data.Registry.Aeson.TH.ThOptions
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Protolude hiding (Type)
@@ -47,18 +48,18 @@ fieldsOf other = do
   fail "encoders / decoders creation failed"
 
 -- | Remove the module name from a qualified name
-dropQualified :: Name -> Name
-dropQualified name = maybe name (mkName . toS) (lastMay (T.splitOn "." (show name)))
+makeName :: ThOptions -> Name -> Name
+makeName options = mkName . toS . modifyTypeName options . show
 
--- | Return the name of a given type
-getSimpleTypeName :: Type -> Name
-getSimpleTypeName (ForallT _ _ ty) = getSimpleTypeName ty
-getSimpleTypeName (VarT name) = dropQualified name
-getSimpleTypeName (ConT name) = dropQualified name
-getSimpleTypeName (TupleT n) = dropQualified $ tupleTypeName n
-getSimpleTypeName ArrowT = dropQualified ''(->)
-getSimpleTypeName ListT = dropQualified ''[]
-getSimpleTypeName (AppT t1 t2) = mkName (show (getSimpleTypeName t1) <> " " <> show (getSimpleTypeName t2))
-getSimpleTypeName (SigT t _) = getSimpleTypeName t
-getSimpleTypeName (UnboxedTupleT n) = dropQualified $ unboxedTupleTypeName n
-getSimpleTypeName t = panic $ "getSimpleTypeName: Unknown type: " <> show t
+-- | Return the name of a given type with a modified name based on options
+getSimpleTypeName :: ThOptions -> Type -> Name
+getSimpleTypeName options (ForallT _ _ ty) = getSimpleTypeName options ty
+getSimpleTypeName options (VarT name) = makeName options name
+getSimpleTypeName options (ConT name) = makeName options name
+getSimpleTypeName options (TupleT n) = makeName options $ tupleTypeName n
+getSimpleTypeName options ArrowT = makeName options ''(->)
+getSimpleTypeName options ListT = makeName options ''[]
+getSimpleTypeName options (AppT t1 t2) = mkName (show (getSimpleTypeName options t1) <> " " <> show (getSimpleTypeName options t2))
+getSimpleTypeName options (SigT t _) = getSimpleTypeName options t
+getSimpleTypeName options (UnboxedTupleT n) = makeName options $ unboxedTupleTypeName n
+getSimpleTypeName _ t = panic $ "getSimpleTypeName: Unknown type: " <> show t

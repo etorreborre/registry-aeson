@@ -1,7 +1,8 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Test.Data.Registry.Aeson.DataTypes where
+-- | This modules helps testing that we can use TemplateHaskell when there are name clashes
+module Test.Data.Registry.Aeson.SimilarDataTypes where
 
 import Data.Aeson
 import Data.Time

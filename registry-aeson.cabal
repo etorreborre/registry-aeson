@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           registry-aeson
-version:        0.2.2.0
+version:        0.2.3.0
 synopsis:       Aeson encoders / decoders
 description:    This library provides encoders / decoders which can be easily customized for the Aeson format.
 category:       Data
@@ -27,40 +27,25 @@ library
       Data.Registry.Aeson.TH.Decoder
       Data.Registry.Aeson.TH.Encoder
       Data.Registry.Aeson.TH.TH
+      Data.Registry.Aeson.TH.ThOptions
   other-modules:
       Paths_registry_aeson
   hs-source-dirs:
       src
   default-extensions:
-      BangPatterns
       DefaultSignatures
-      EmptyCase
-      ExistentialQuantification
-      FlexibleContexts
-      FlexibleInstances
+      DerivingStrategies
       FunctionalDependencies
       GADTs
-      DerivingVia
-      DerivingStrategies
-      InstanceSigs
-      KindSignatures
       LambdaCase
-      MultiParamTypeClasses
       MultiWayIf
-      NamedFieldPuns
       NoImplicitPrelude
       OverloadedStrings
       PatternSynonyms
-      Rank2Types
-      RankNTypes
-      ScopedTypeVariables
-      StandaloneDeriving
+      StrictData
       TemplateHaskell
-      TupleSections
-      TypeApplications
       TypeFamilies
       TypeFamilyDependencies
-      TypeOperators
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -fhide-source-paths -fprint-potential-instances -fno-warn-partial-type-signatures -optP-Wno-nonportable-include-path -Wincomplete-uni-patterns
   build-depends:
       aeson ==2.*
@@ -74,7 +59,7 @@ library
     , transformers >=0.5 && <2
     , unordered-containers >=0.2 && <1
     , vector >=0.1 && <1
-  default-language: Haskell2010
+  default-language: GHC2021
 
 test-suite spec
   type: exitcode-stdio-1.0
@@ -87,39 +72,24 @@ test-suite spec
       Test.Data.Registry.Aeson.RecursiveSpec
       Test.Data.Registry.Aeson.RoundtripData
       Test.Data.Registry.Aeson.RoundtripSpec
+      Test.Data.Registry.Aeson.SimilarDataTypes
       Paths_registry_aeson
   hs-source-dirs:
       test
   default-extensions:
-      BangPatterns
       DefaultSignatures
-      EmptyCase
-      ExistentialQuantification
-      FlexibleContexts
-      FlexibleInstances
+      DerivingStrategies
       FunctionalDependencies
       GADTs
-      DerivingVia
-      DerivingStrategies
-      InstanceSigs
-      KindSignatures
       LambdaCase
-      MultiParamTypeClasses
       MultiWayIf
-      NamedFieldPuns
       NoImplicitPrelude
       OverloadedStrings
       PatternSynonyms
-      Rank2Types
-      RankNTypes
-      ScopedTypeVariables
-      StandaloneDeriving
+      StrictData
       TemplateHaskell
-      TupleSections
-      TypeApplications
       TypeFamilies
       TypeFamilyDependencies
-      TypeOperators
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -fhide-source-paths -fprint-potential-instances -fno-warn-partial-type-signatures -optP-Wno-nonportable-include-path -threaded -rtsopts -with-rtsopts=-N -fno-warn-orphans -fno-warn-missing-signatures -fno-warn-incomplete-uni-patterns -fno-warn-type-defaults -optP-Wno-nonportable-include-path
   build-depends:
       aeson ==2.*
@@ -138,4 +108,4 @@ test-suite spec
     , transformers >=0.5 && <2
     , unordered-containers >=0.2 && <1
     , vector >=0.1 && <1
-  default-language: Haskell2010
+  default-language: GHC2021

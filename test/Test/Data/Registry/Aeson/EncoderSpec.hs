@@ -17,6 +17,7 @@ import qualified Data.Text.Encoding as T
 import Data.Time
 import Protolude
 import Test.Data.Registry.Aeson.DataTypes
+import Test.Data.Registry.Aeson.SimilarDataTypes qualified as SimilarDataTypes
 import Test.Tasty.Hedgehogx hiding (string)
 
 test_encode = test "encode" $ do
@@ -61,6 +62,11 @@ test_two_elem_array_sum_encoding = test "TwoElemArray" $ do
 encoders :: Registry _ _
 encoders =
   $(makeEncoder ''Delivery)
+      -- test that it is possible to generate an Encoder when there are name clashes
+    <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Person)
+    <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Email)
+    <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Identifier)
+    <: $(makeEncoderQualifiedLast ''SimilarDataTypes.DateTime)
     <: $(makeEncoder ''Person)
     <: $(makeEncoder ''Email)
     <: $(makeEncoder ''Identifier)
@@ -74,6 +80,7 @@ encoders =
     <: $(makeEncoder ''ObjectWithSingleFieldSumEncoding)
     <: $(makeEncoder ''TwoElemArraySumEncoding)
     <: fun datetimeEncoder
+    <: fun utcTimeEncoder
     <: encodeMaybeOf @Int
     <: jsonEncoder @Text
     <: jsonEncoder @Int
@@ -84,6 +91,10 @@ datetimeEncoder :: Encoder DateTime
 datetimeEncoder = fromValue $ \(DateTime dt) -> do
   let formatted = toS $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" dt
   Object [("_datetime", String formatted)]
+
+-- | This Encoder for DateTime reproduces the default generic one
+utcTimeEncoder :: Encoder UTCTime
+utcTimeEncoder = fromValue $ String . toS . formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
 
 -- | Check that the encoding performed with the registry and the one performed with a Generic instance are the same
 --   This helps validating the encoding algorithm based on the various Options values

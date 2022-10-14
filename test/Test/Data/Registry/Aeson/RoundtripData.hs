@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
@@ -10,13 +11,16 @@ import Protolude hiding (bool)
 import Prelude (String)
 
 data T0 = T0
-  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+  deriving stock (Eq, Show, Generic)
+  deriving (FromJSON, ToJSON)
 
 newtype T1 = T1 Int
-  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+  deriving stock (Eq, Show, Generic)
+  deriving newtype (FromJSON, ToJSON)
 
 newtype T2 = T2 {t2Int :: Int}
-  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+  deriving stock (Eq, Show, Generic)
+  deriving newtype (FromJSON, ToJSON)
 
 data T3 = T3 Int
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
