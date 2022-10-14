@@ -8,12 +8,14 @@
 module Test.Data.Registry.Aeson.EncoderSpec where
 
 import Data.Aeson hiding (encode)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.Lazy as BL (fromStrict, toStrict)
+import Data.Aeson qualified as A
+import Data.ByteString.Lazy qualified as BL (fromStrict, toStrict)
+import Data.Functor.Contravariant
+import Data.Map qualified as M
 import Data.Registry
 import Data.Registry.Aeson.Encoder
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Time
 import Protolude
 import Test.Data.Registry.Aeson.DataTypes
@@ -57,12 +59,17 @@ test_object_with_single_field_sum_encoding = test "ObjectWithSingleFieldSumEncod
 test_two_elem_array_sum_encoding = test "TwoElemArray" $ do
   checkEncodingsWith twoElemArraySumEncodingOptions (TwoElemArraySumEncoding1 123) "['TwoElemArraySumEncoding1',{'teaField1':123}]"
 
+test_types_th_index_error = test "error with TH when 2 fields have the same type" $ do
+  -- this code did not compile before
+  let _ = $(makeEncoder ''Stats) <: jsonEncoder @Int <: defaultEncoderOptions
+  success
+
 -- * HELPERS
 
 encoders :: Registry _ _
 encoders =
   $(makeEncoder ''Delivery)
-      -- test that it is possible to generate an Encoder when there are name clashes
+    -- test that it is possible to generate an Encoder when there are name clashes
     <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Person)
     <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Email)
     <: $(makeEncoderQualifiedLast ''SimilarDataTypes.Identifier)

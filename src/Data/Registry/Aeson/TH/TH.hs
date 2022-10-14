@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
@@ -16,11 +15,18 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Protolude hiding (Type)
 
-indexConstructorTypes :: [Type] -> [Type] -> Q [(Type, Int)]
+-- | From:
+--    - the list of all the types of a data type
+--    - the list of the parameters types for one of the constructors
+--    Return:
+--     - the type
+--     - its index in the list of parameter types
+--     - its index in the list of all the types
+indexConstructorTypes :: [Type] -> [Type] -> Q [(Type, Int, Int)]
 indexConstructorTypes allTypes constructorTypes =
-  for constructorTypes $ \t ->
+  for (zip [0..] constructorTypes) $ \(n, t) ->
     case elemIndex t allTypes of
-      Just n -> pure (t, n)
+      Just k -> pure (t, n, k)
       Nothing -> fail $ "the type " <> show t <> " cannot be found in the list of all types " <> show allTypes
 
 -- | Get the types of all the fields of a constructor

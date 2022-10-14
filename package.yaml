@@ -1,5 +1,5 @@
 name: registry-aeson
-version: 0.2.3.0
+version: 0.2.3.1
 synopsis: Aeson encoders / decoders
 
 description: This library provides encoders / decoders which can be easily customized for the Aeson format.

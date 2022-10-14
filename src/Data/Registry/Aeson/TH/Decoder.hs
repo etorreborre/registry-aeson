@@ -90,7 +90,7 @@ makeConstructorsDecoder thOptions typeName cs = do
 makeMatchClause :: ThOptions -> Name -> [Type] -> Con -> MatchQ
 makeMatchClause thOptions typeName allTypes c = do
   ts <- typesOf c
-  constructorTypes <- fmap snd <$> indexConstructorTypes allTypes ts
+  constructorTypes <- fmap (\(_,_,k) -> k) <$> indexConstructorTypes allTypes ts
   cName <- makeName thOptions <$> nameOf c
   let fieldsP = listP $ (\i -> varP $ mkName ("v" <> P.show i)) <$> constructorTypes
   match

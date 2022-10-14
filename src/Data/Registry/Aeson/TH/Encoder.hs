@@ -78,8 +78,8 @@ makeMatchClause thOptions constructorNames allTypes c = do
   let types = listE $ litE . StringL . show <$> allTypes
   fields <- fieldsOf c
   let fieldNames = listE $ litE . StringL . show . makeName thOptions <$> fields
-  let params = conP (mkName $ show cName) $ (\(_, n) -> varP (mkName $ "a" <> show n)) <$> constructorTypes
-  let values = listE $ (\(_, n) -> appE (appE (varE $ mkName "encode") (varE (mkName $ "e" <> show n))) (varE (mkName $ "a" <> show n))) <$> constructorTypes
+  let params = conP (mkName $ show cName) $ (\(_, n, _) -> varP (mkName $ "a" <> show n)) <$> constructorTypes
+  let values = listE $ (\(_, n, k) -> appE (appE (varE $ mkName "encode") (varE (mkName $ "e" <> show k))) (varE (mkName $ "a" <> show n))) <$> constructorTypes
   let encoded =
         varE (mkName "encodeConstructor")
           `appE` varE (mkName "ce")

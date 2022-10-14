@@ -173,3 +173,8 @@ instance ToJSON TwoElemArraySumEncoding where
 
 instance FromJSON TwoElemArraySumEncoding where
   parseJSON = genericParseJSON twoElemArraySumEncodingOptions
+
+data Stats = Stats {
+  s1 :: Int,
+  s2 :: Int
+} deriving (Eq, Show)
