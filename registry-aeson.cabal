@@ -69,6 +69,9 @@ test-suite spec
       Test.Data.Registry.Aeson.DataTypes
       Test.Data.Registry.Aeson.DecoderSpec
       Test.Data.Registry.Aeson.EncoderSpec
+      Test.Data.Registry.Aeson.Examples.Deliverix
+      Test.Data.Registry.Aeson.Examples.ProtocolEvolution
+      Test.Data.Registry.Aeson.Examples.Protocols
       Test.Data.Registry.Aeson.RecursiveSpec
       Test.Data.Registry.Aeson.RoundtripData
       Test.Data.Registry.Aeson.RoundtripSpec
@@ -101,6 +104,7 @@ test-suite spec
     , registry >=0.2 && <0.4
     , registry-aeson
     , registry-hedgehog
+    , string-qq
     , tasty
     , template-haskell >=2.13 && <3.0
     , text ==1.*

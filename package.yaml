@@ -66,6 +66,7 @@ tests:
       - hedgehog
       - registry-hedgehog
       - registry-aeson
+      - string-qq
       - tasty
       - time
 
