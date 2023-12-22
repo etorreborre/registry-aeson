@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -24,6 +24,7 @@ library
   exposed-modules:
       Data.Registry.Aeson.Decoder
       Data.Registry.Aeson.Encoder
+      Data.Registry.Aeson.JsonExpr
       Data.Registry.Aeson.TH.Decoder
       Data.Registry.Aeson.TH.Encoder
       Data.Registry.Aeson.TH.TH
@@ -33,6 +34,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      BlockArguments
       DefaultSignatures
       DerivingStrategies
       FunctionalDependencies
@@ -54,6 +56,7 @@ library
     , containers >=0.2 && <1
     , protolude ==0.3.*
     , registry >=0.4 && <1
+    , scientific >=0.3 && <5
     , template-haskell >=2.13 && <3.0
     , text ==1.*
     , transformers >=0.5 && <2
@@ -72,6 +75,8 @@ test-suite spec
       Test.Data.Registry.Aeson.Examples.Deliverix
       Test.Data.Registry.Aeson.Examples.ProtocolEvolution
       Test.Data.Registry.Aeson.Examples.Protocols
+      Test.Data.Registry.Aeson.Examples.Restaurant.EncodeDecode
+      Test.Data.Registry.Aeson.Examples.Restaurant.Model
       Test.Data.Registry.Aeson.RecursiveSpec
       Test.Data.Registry.Aeson.RoundtripData
       Test.Data.Registry.Aeson.RoundtripSpec
@@ -80,6 +85,7 @@ test-suite spec
   hs-source-dirs:
       test
   default-extensions:
+      BlockArguments
       DefaultSignatures
       DerivingStrategies
       FunctionalDependencies
@@ -104,6 +110,7 @@ test-suite spec
     , registry >=0.4 && <1
     , registry-aeson
     , registry-hedgehog
+    , scientific >=0.3 && <5
     , string-qq
     , tasty
     , template-haskell >=2.13 && <3.0

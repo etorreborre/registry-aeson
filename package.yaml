@@ -25,6 +25,7 @@ ghc-options: -Wall
   -optP-Wno-nonportable-include-path
 
 default-extensions:
+  - BlockArguments
   - DefaultSignatures
   - DerivingStrategies
   - FunctionalDependencies
@@ -46,6 +47,7 @@ dependencies:
   - bytestring           >= 0.10  && < 1
   - protolude            >= 0.3   && < 0.4
   - registry             >= 0.4   && < 1
+  - scientific           >= 0.3   && < 5
   - template-haskell     >= 2.13  && < 3.0
   - text                 >= 1     && < 2
   - transformers         >= 0.5   && < 2
