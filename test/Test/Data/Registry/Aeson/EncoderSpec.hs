@@ -76,6 +76,7 @@ test_encode_map = test "encode maps" $ do
 
 -- * HELPERS
 
+
 encoders :: Registry _ _
 encoders =
   $(makeEncoder ''Delivery)

@@ -14,7 +14,7 @@ import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as BL (fromStrict, toStrict)
 import Data.Registry
 import Data.Registry.Aeson.Decoder
-import Data.Registry.Aeson.Encoder
+import Data.Registry.Aeson.Encoder hiding (bool)
 import Data.Registry.Hedgehog
 import Data.Registry.Hedgehog.TH
 import qualified Data.Text as T

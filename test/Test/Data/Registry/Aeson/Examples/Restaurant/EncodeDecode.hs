@@ -4,21 +4,21 @@
 
 module Test.Data.Registry.Aeson.Examples.Restaurant.EncodeDecode where
 
-import Test.Data.Registry.Aeson.Examples.Restaurant.Model
-import Data.Aeson hiding (decode, encode)
+import Data.Aeson hiding (decode, encode, pairs)
 import Data.Aeson qualified as A
+import Data.ByteString.Lazy qualified as BL (toStrict)
 import Data.Registry
-import Data.Registry.Aeson.Encoder
 import Data.Registry.Aeson.Decoder
+import Data.Registry.Aeson.Encoder
 import Data.Text.Encoding qualified as T
 import Protolude
-import Test.Tasty.Hedgehogx hiding (either, maybe, text)
-import Data.ByteString.Lazy qualified as BL (fromStrict, toStrict)
 import Test.Data.Registry.Aeson.EncoderSpec (checkValue)
+import Test.Data.Registry.Aeson.Examples.Restaurant.Model
+import Test.Tasty.Hedgehogx hiding (either, maybe, text)
 
 encoders :: Registry _ _
 encoders =
-       fun tableEncoder
+  fun tableEncoder
     <: fun singleTableEncoder
     <: $(makeEncoder ''Natural)
     <: jsonEncoder @Integer
@@ -26,22 +26,20 @@ encoders =
     <: defaultEncoderOptions
 
 singleTableEncoder :: Encoder Natural -> Encoder SingleTable
-singleTableEncoder nat = Encoder \(SingleTable c m) -> do
-  let value =
-        A.object [
-          "capacity" .= encodeValue nat c,
-          "minimalReservation" .= encodeValue nat m
-        ]
-  (value, toEncoding value)
+singleTableEncoder nat = Encoder \(SingleTable c m) ->
+  pairs
+    [ pair "capacity" (encode nat c),
+      pair "minimalReservation" (encode nat m)
+    ]
 
 tableEncoder :: Encoder Natural -> Encoder SingleTable -> Encoder Table
 tableEncoder nat st = Encoder \case
-  Single t -> (A.object ["single" .= encodeValue st t], undefined)
-  Communal c -> (A.object ["communal" .= encodeValue nat c], undefined)
+  Single t -> pairs [pair "single" (encode st t)]
+  Communal c -> pairs [pair "communal" (encode nat c)]
 
 decoders :: Registry _ _
 decoders =
-       $(makeDecoder ''Table)
+  $(makeDecoder ''Table)
     <: $(makeDecoder ''SingleTable)
     <: $(makeDecoder ''Natural)
     <: jsonDecoder @Integer

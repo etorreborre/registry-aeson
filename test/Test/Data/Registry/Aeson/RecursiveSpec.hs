@@ -4,7 +4,6 @@
 
 module Test.Data.Registry.Aeson.RecursiveSpec where
 
-import Data.Aeson.Encoding.Internal
 import Data.Registry
 import Data.Registry.Aeson.Encoder
 import Protolude hiding (list)
@@ -27,10 +26,9 @@ encoders =
 
 pathEncoder :: Encoder Int -> Encoder Path
 pathEncoder intEncoder = do
-  let thisEncoder = Encoder $ \case
+  let thisEncoder :: Encoder Path = Encoder $ \case
         File n ->
           encode intEncoder n
-        Directory paths -> do
-          let (vs, es) = unzip (encode thisEncoder <$> paths)
-          (array vs, list identity es)
+        Directory paths ->
+          list $ (\p -> encode thisEncoder p) <$> paths
   thisEncoder

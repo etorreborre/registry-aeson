@@ -88,10 +88,13 @@ encodingJsonAlgebra = JsonAlgebra {..}
     toJson_ :: (Value, Encoding) -> Encoding
     toJson_ = snd
 
-type JsonTerm = forall a. JsonAlgebra a -> a
+newtype JsonTerm = JsonTerm  { term :: forall a. JsonAlgebra a -> a }
+
+(<%>) :: JsonTerm -> JsonAlgebra a -> a
+(<%>) (JsonTerm t) j = t j
 
 string :: Text -> JsonTerm
-string t = \ja -> string_ ja t
+string t = JsonTerm $ \ja -> string_ ja t
 
 int :: Int -> JsonTerm
 int n = scientific (fromInteger . integerFromInt $ n)
@@ -106,28 +109,28 @@ float :: Float -> JsonTerm
 float n = scientific (fromFloatDigits n)
 
 scientific :: Scientific -> JsonTerm
-scientific n = \ja -> number_ ja n
+scientific n = JsonTerm $ \ja -> number_ ja n
 
 bool :: Bool -> JsonTerm
-bool b = \ja -> bool_ ja b
+bool b = JsonTerm $ \ja -> bool_ ja b
 
 null :: JsonTerm
-null = null_
+null = JsonTerm $ \ja -> null_ ja
 
 pair :: A.Key -> JsonTerm -> (forall a. JsonAlgebra a -> Pair a)
-pair k v ja = pair_ ja k (v ja)
+pair k v ja = pair_ ja k (v <%> ja)
 
 pairs :: [(forall a. JsonAlgebra a -> Pair a)] -> JsonTerm
-pairs vs ja = pairs_ ja ((\a -> a ja) <$> vs)
+pairs vs = JsonTerm $ \ja -> pairs_ ja ((\v -> v ja) <$> vs)
 
 list :: [JsonTerm] -> JsonTerm
-list vs = \ja -> list_ ja ((\a -> a ja) <$> vs)
+list vs = JsonTerm $ \ja -> list_ ja ((\a -> a <%> ja) <$> vs)
 
 toJson :: (ToJSON a) => a -> JsonTerm
-toJson a j = toJson_ j (A.toJSON a, A.toEncoding a)
+toJson a = JsonTerm $ \j -> toJson_ j (A.toJSON a, A.toEncoding a)
 
 both :: JsonTerm -> (Value, Encoding)
-both e = (e valueJsonAlgebra, e encodingJsonAlgebra)
+both e = (e <%> valueJsonAlgebra, e <%> encodingJsonAlgebra)
 
 isNull :: JsonTerm -> Bool
-isNull j = j valueJsonAlgebra /= A.Null
+isNull j = j <%> valueJsonAlgebra == A.Null
