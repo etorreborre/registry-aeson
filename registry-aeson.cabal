@@ -24,9 +24,11 @@ library
   exposed-modules:
       Data.Registry.Aeson.Decoder
       Data.Registry.Aeson.Encoder
-      Data.Registry.Aeson.JsonExpr
+      Data.Registry.Aeson.Encoder1
+      Data.Registry.Aeson.JsonTerm
       Data.Registry.Aeson.TH.Decoder
       Data.Registry.Aeson.TH.Encoder
+      Data.Registry.Aeson.TH.Encoder1
       Data.Registry.Aeson.TH.TH
       Data.Registry.Aeson.TH.ThOptions
   other-modules:
