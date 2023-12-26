@@ -39,7 +39,7 @@ import Prelude (String)
 --     - using TemplateHaskell
 --     - combining existing encoders
 --     - manually by creating JsonTerms (see JsonTerm.hs for the API)
-newtype Encoder a = Encoder {encode :: a -> JsonTerm}
+newtype Encoder a = Encoder {encode :: a -> JsonTerm ()}
 
 instance Contravariant Encoder where
   contramap f (Encoder e) = Encoder (\a -> e (f a))
@@ -52,10 +52,10 @@ instance Contravariant KeyEncoder where
 -- * ENCODE VALUES
 
 encodeByteString :: Encoder a -> a -> ByteString
-encodeByteString (Encoder e) a = BL.toStrict (encodingToLazyByteString $ e a <%> encodingJsonAlgebra)
+encodeByteString (Encoder e) a = BL.toStrict (encodingToLazyByteString $ makeEncoding (e a))
 
 encodeValue :: Encoder a -> a -> Value
-encodeValue (Encoder e) a = e a <%> valueJsonAlgebra
+encodeValue (Encoder e) a = makeValue (e a)
 
 -- * CREATE KEY ENCODERS
 
@@ -157,7 +157,7 @@ stringKeyEncoder = KeyEncoder K.fromString
 -- | A ConstructorEncoder uses configuration options + type information extracted from
 --   a given data type (with TemplateHaskell) in order to produce a JsonTerm
 newtype ConstructorEncoder = ConstructorEncoder
-  { encodeConstructor :: Options -> FromConstructor -> JsonTerm
+  { encodeConstructor :: Options -> FromConstructor -> JsonTerm ()
   }
 
 -- | Default implementation, it can be overridden in a registry
@@ -176,11 +176,11 @@ data FromConstructor = FromConstructor
     -- | name of all the constructor fields
     fromConstructorFieldNames :: [Text],
     -- | encoded values of all the constructor fields
-    fromConstructorValues :: [JsonTerm]
+    fromConstructorValues :: [JsonTerm ()]
   }
 
 -- | Make an Encoder from Options and the representation of a constructor for a given value to encode
-makeEncoderFromConstructor :: Options -> FromConstructor -> JsonTerm
+makeEncoderFromConstructor :: Options -> FromConstructor -> JsonTerm ()
 makeEncoderFromConstructor options fromConstructor = do
   let fc = modifyFromConstructorWithOptions options fromConstructor
   case fc of
@@ -209,7 +209,7 @@ makeEncoderFromConstructor options fromConstructor = do
     _ ->
       makeSumEncoding options fc
 
-makeSumEncoding :: Options -> FromConstructor -> JsonTerm
+makeSumEncoding :: Options -> FromConstructor -> JsonTerm ()
 makeSumEncoding options (FromConstructor _constructorNames _constructorTypes constructorTag fieldNames values) = do
   let fieldNamesKeys = K.fromText <$> fieldNames
   case sumEncoding options of
@@ -285,6 +285,6 @@ modifyFromConstructorWithOptions options fc = do
 
 -- | Create an Object from a list of field names and a list of Values
 --   both as a Value and as an Encoding
-valuesToObject :: [Text] -> [JsonTerm] -> JsonTerm
+valuesToObject :: [Text] -> [JsonTerm ()] -> JsonTerm ()
 valuesToObject fieldNames values =
   JsonTerm.object $ ((\(n, v) -> JsonTerm.pair (K.fromText n) v)) <$> zip fieldNames values
