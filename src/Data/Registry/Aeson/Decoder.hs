@@ -84,7 +84,7 @@ keyDecoder f = KeyDecoder $ f . K.toText
 jsonDecoder :: forall a. (FromJSON a, Typeable a) => Typed (Decoder a)
 jsonDecoder = fun (jsonDecoderOf @a)
 
-jsonDecoderOf :: FromJSON a => Decoder a
+jsonDecoderOf :: (FromJSON a) => Decoder a
 jsonDecoderOf = Decoder $ \v ->
   case fromJSON v of
     Success a -> Right a
@@ -526,5 +526,5 @@ encodeAsText :: (ToJSON a) => a -> Text
 encodeAsText = T.decodeUtf8 . BL.toStrict . encode
 
 -- | Return a "s" if there are more than one element
-plural :: Foldable f => f a -> Text
+plural :: (Foldable f) => f a -> Text
 plural as = if length (toList as) > 1 then "s" else ""

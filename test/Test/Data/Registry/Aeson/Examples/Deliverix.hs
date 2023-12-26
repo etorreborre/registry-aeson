@@ -33,7 +33,7 @@ data Address = Address
   }
   deriving (Eq, Show)
 
-newtype StreetNumber = StreetNumber { streetNumber :: Text } deriving (Eq, Show)
+newtype StreetNumber = StreetNumber {streetNumber :: Text} deriving (Eq, Show)
 
 data Customer = Customer
   { customerName :: Text,

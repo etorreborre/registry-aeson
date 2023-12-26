@@ -4,8 +4,8 @@ module Data.Registry.Aeson.TH.Decoder where
 
 import Control.Monad.Fail
 import Data.List (nub)
-import Data.Registry.Aeson.TH.ThOptions
 import Data.Registry.Aeson.TH.TH
+import Data.Registry.Aeson.TH.ThOptions
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Protolude as P hiding (Type)
@@ -90,7 +90,7 @@ makeConstructorsDecoder thOptions typeName cs = do
 makeMatchClause :: ThOptions -> Name -> [Type] -> Con -> MatchQ
 makeMatchClause thOptions typeName allTypes c = do
   ts <- typesOf c
-  constructorTypes <- fmap (\(_,n,k) -> (n, k)) <$> indexConstructorTypes allTypes ts
+  constructorTypes <- fmap (\(_, n, k) -> (n, k)) <$> indexConstructorTypes allTypes ts
   cName <- makeName thOptions <$> nameOf c
   let fieldsP = listP $ (\(n, _) -> varP $ mkName ("v" <> P.show n)) <$> constructorTypes
   match

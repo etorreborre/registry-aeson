@@ -35,7 +35,7 @@ currentProtocol =
 --   able to still read old values
 protocolV1 :: Registry _ _
 protocolV1 =
-       val (defaultOptions {omitNothingFields = True}) -- to allow for missing coupons
+  val (defaultOptions {omitNothingFields = True}) -- to allow for missing coupons
     <: fun streetNumberDecoder
     <: jsonDecoder @Int
     <: currentProtocol

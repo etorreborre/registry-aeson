@@ -13,12 +13,14 @@ tryNatural n
   | otherwise = Just (Natural n)
 
 {-# COMPLETE N #-}
+
 pattern N :: Integer -> Natural
 pattern N i <- Natural i
 
 data SingleTable = SingleTable
-  { singleCapacity :: Natural
-  , minimalReservation :: Natural
-  } deriving (Eq, Ord, Show)
+  { singleCapacity :: Natural,
+    minimalReservation :: Natural
+  }
+  deriving (Eq, Ord, Show)
 
 data Table = Single SingleTable | Communal Natural deriving (Eq, Show)

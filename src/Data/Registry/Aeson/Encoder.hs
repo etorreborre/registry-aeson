@@ -138,7 +138,7 @@ array = Array . V.fromList
 
 defaultEncoderOptions :: Registry _ _
 defaultEncoderOptions =
-       fun defaultConstructorEncoder
+  fun defaultConstructorEncoder
     <: fun textKeyEncoder
     <: fun stringKeyEncoder
     <: val defaultOptions

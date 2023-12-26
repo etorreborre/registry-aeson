@@ -24,7 +24,7 @@ import Protolude hiding (Type)
 --     - its index in the list of all the types
 indexConstructorTypes :: [Type] -> [Type] -> Q [(Type, Int, Int)]
 indexConstructorTypes allTypes constructorTypes =
-  for (zip [0..] constructorTypes) $ \(n, t) ->
+  for (zip [0 ..] constructorTypes) $ \(n, t) ->
     case elemIndex t allTypes of
       Just k -> pure (t, n, k)
       Nothing -> fail $ "the type " <> show t <> " cannot be found in the list of all types " <> show allTypes

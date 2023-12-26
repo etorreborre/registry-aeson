@@ -4,8 +4,8 @@ module Data.Registry.Aeson.TH.Encoder where
 
 import Control.Monad.Fail
 import Data.List (nub)
-import Data.Registry.Aeson.TH.ThOptions
 import Data.Registry.Aeson.TH.TH
+import Data.Registry.Aeson.TH.ThOptions
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Protolude as P hiding (Type)

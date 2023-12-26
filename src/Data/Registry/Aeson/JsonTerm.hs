@@ -88,7 +88,7 @@ encodingJsonAlgebra = JsonAlgebra {..}
     toJson_ :: (Value, Encoding) -> Encoding
     toJson_ = snd
 
-newtype JsonTerm = JsonTerm  { term :: forall a. JsonAlgebra a -> a }
+newtype JsonTerm = JsonTerm {term :: forall a. JsonAlgebra a -> a}
 
 (<%>) :: JsonTerm -> JsonAlgebra a -> a
 (<%>) (JsonTerm t) j = t j

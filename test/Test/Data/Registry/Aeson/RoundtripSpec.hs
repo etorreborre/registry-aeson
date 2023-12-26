@@ -10,15 +10,15 @@
 module Test.Data.Registry.Aeson.RoundtripSpec where
 
 import Data.Aeson hiding (encode)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.Lazy as BL (fromStrict, toStrict)
+import Data.Aeson qualified as A
+import Data.ByteString.Lazy qualified as BL (fromStrict, toStrict)
 import Data.Registry
 import Data.Registry.Aeson.Decoder
 import Data.Registry.Aeson.Encoder hiding (bool)
 import Data.Registry.Hedgehog
 import Data.Registry.Hedgehog.TH
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Hedgehog.Gen hiding (maybe, print)
 import Hedgehog.Range
 import Protolude hiding (bool)
@@ -76,7 +76,7 @@ test_regressions = test "regressions" $ do
   checkDecodingWith defaultOptions {fieldLabelModifier = labelModifier, allNullaryToStringTag = False, sumEncoding = UntaggedValue} "[{'_t12String':'a'},[1,{'_t2Int':1}]]" (T16_2 (T12_2 "a") (T15_1 (T1 1) (T2 1))) NoDecodeGeneric
 
   checkEncodingsWith options16 Case16 "{'tag':'Case16'}" NoEncodeGeneric
-  checkDecodingWith options16 "{'tag':'Case16'}"  Case16 NoDecodeGeneric
+  checkDecodingWith options16 "{'tag':'Case16'}" Case16 NoDecodeGeneric
 
 -- * HELPERS
 
@@ -260,4 +260,5 @@ checkDecodingWith options t a decodeGeneric = withFrozenCallStack $ do
   asValue === Right a
 
 data EncodeGeneric = EncodeGeneric | NoEncodeGeneric deriving (Eq, Show)
+
 data DecodeGeneric = DecodeGeneric | NoDecodeGeneric deriving (Eq, Show)
