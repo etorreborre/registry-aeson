@@ -31,6 +31,14 @@ import Prelude (String)
 
 -- * ENCODER DATA TYPE
 
+-- | An Encoder takes a value of type `a` and return a JsonTerm
+--   That term is polymorphic and can be represented by either a Value or an Encoding
+--   depending on how we want to eventually encode `a`.
+--
+--   Encoders can be created either by:
+--     - using TemplateHaskell
+--     - combining existing encoders
+--     - manually by creating JsonTerms (see JsonTerm.hs for the API)
 newtype Encoder a = Encoder {encode :: a -> JsonTerm}
 
 instance Contravariant Encoder where
@@ -49,29 +57,29 @@ encodeByteString (Encoder e) a = BL.toStrict (encodingToLazyByteString $ e a <%>
 encodeValue :: Encoder a -> a -> Value
 encodeValue (Encoder e) a = e a <%> valueJsonAlgebra
 
--- -- * CREATE KEY ENCODERS
+-- * CREATE KEY ENCODERS
 
--- -- | Make a key encoder from a function returning some text
+-- | Make a key encoder from a function returning some text
 encodeKey :: forall a. (Typeable a) => (a -> Text) -> Typed (KeyEncoder a)
 encodeKey f = fun (keyEncoder f)
 
 keyEncoder :: (a -> Text) -> KeyEncoder a
 keyEncoder f = KeyEncoder $ K.fromString . toS . f
 
--- -- * CREATE ENCODERS
+-- * CREATE ENCODERS
 
--- -- | Create an Encoder from a function returning a Value
+-- | Create an Encoder from a function returning a Value
 fromValue :: (a -> Value) -> Encoder a
 fromValue f = Encoder (\a -> toJson (f a))
 
--- -- | Create an encoder from a Aeson instance
+-- | Create an encoder from a Aeson instance
 jsonEncoder :: forall a. (ToJSON a, Typeable a) => Typed (Encoder a)
 jsonEncoder = fun (jsonEncoderOf @a)
 
 jsonEncoderOf :: (ToJSON a) => Encoder a
 jsonEncoderOf = Encoder \a -> toJson a
 
--- -- * COMBINATORS
+-- * COMBINATORS
 
 -- | Create an Encoder for a (Maybe a)
 encodeMaybeOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder (Maybe a))

@@ -53,8 +53,8 @@ singleTableEncoder nat = Encoder \(SingleTable c m) ->
 
 tableEncoder :: Encoder Natural -> Encoder SingleTable -> Encoder Table
 tableEncoder nat st = Encoder \case
-  Single t -> object [pair "single" (encode st t)]
-  Communal c -> object [pair "communal" (object [pair "capacity" (encode nat c)])]
+  Single t -> single "single" (encode st t)
+  Communal c -> single "communal" (single "capacity" (encode nat c))
 
 singleTableDecoder :: Decoder Natural -> Decoder SingleTable
 singleTableDecoder nat = Decoder \case
