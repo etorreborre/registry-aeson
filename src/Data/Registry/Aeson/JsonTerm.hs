@@ -20,8 +20,8 @@ data JsonAlgebra a = JsonAlgebra
     bool_ :: Bool -> a,
     null_ :: a,
     pair_ :: A.Key -> a -> Pair a,
-    pairs_ :: [Pair a] -> a,
-    list_ :: [a] -> a,
+    object_ :: [Pair a] -> a,
+    array_ :: [a] -> a,
     toJson_ :: (Value, Encoding) -> a
   }
 
@@ -52,11 +52,11 @@ valueJsonAlgebra = JsonAlgebra {..}
     pair_ :: A.Key -> Value -> Pair Value
     pair_ = Pair
 
-    pairs_ :: [Pair Value] -> Value
-    pairs_ = A.Object . KM.fromList . fmap (\(Pair k v) -> (k, v))
+    object_ :: [Pair Value] -> Value
+    object_ = A.Object . KM.fromList . fmap (\(Pair k v) -> (k, v))
 
-    list_ :: [Value] -> Value
-    list_ = A.Array . V.fromList
+    array_ :: [Value] -> Value
+    array_ = A.Array . V.fromList
 
     toJson_ :: (Value, Encoding) -> Value
     toJson_ = fst
@@ -79,11 +79,11 @@ encodingJsonAlgebra = JsonAlgebra {..}
     pair_ :: A.Key -> Encoding -> Pair Encoding
     pair_ = Pair
 
-    pairs_ :: [Pair Encoding] -> Encoding
-    pairs_ = E.pairs . foldMap identity . fmap (\(Pair k v) -> E.pair k v)
+    object_ :: [Pair Encoding] -> Encoding
+    object_ = E.pairs . foldMap identity . fmap (\(Pair k v) -> E.pair k v)
 
-    list_ :: [Encoding] -> Encoding
-    list_ = E.list identity
+    array_ :: [Encoding] -> Encoding
+    array_ = E.list identity
 
     toJson_ :: (Value, Encoding) -> Encoding
     toJson_ = snd
@@ -120,11 +120,11 @@ null = JsonTerm $ \ja -> null_ ja
 pair :: A.Key -> JsonTerm -> (forall a. JsonAlgebra a -> Pair a)
 pair k v ja = pair_ ja k (v <%> ja)
 
-pairs :: [(forall a. JsonAlgebra a -> Pair a)] -> JsonTerm
-pairs vs = JsonTerm $ \ja -> pairs_ ja ((\v -> v ja) <$> vs)
+object :: [(forall a. JsonAlgebra a -> Pair a)] -> JsonTerm
+object vs = JsonTerm $ \ja -> object_ ja ((\v -> v ja) <$> vs)
 
-list :: [JsonTerm] -> JsonTerm
-list vs = JsonTerm $ \ja -> list_ ja ((\a -> a <%> ja) <$> vs)
+array :: [JsonTerm] -> JsonTerm
+array vs = JsonTerm $ \ja -> array_ ja ((\a -> a <%> ja) <$> vs)
 
 toJson :: (ToJSON a) => a -> JsonTerm
 toJson a = JsonTerm $ \j -> toJson_ j (A.toJSON a, A.toEncoding a)

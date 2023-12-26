@@ -13,7 +13,6 @@ tryNatural n
   | otherwise = Just (Natural n)
 
 {-# COMPLETE N #-}
-
 pattern N :: Integer -> Natural
 pattern N i <- Natural i
 

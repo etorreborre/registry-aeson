@@ -26,8 +26,7 @@ import Data.Registry.Aeson.JsonTerm as JsonTerm
 import Data.Registry.Aeson.TH.Encoder
 import Data.Registry.Aeson.TH.ThOptions
 import Data.Set qualified as S
-import Data.Vector qualified as V
-import Protolude as P hiding (Type, list)
+import Protolude as P hiding (Type)
 import Prelude (String)
 
 -- * ENCODER DATA TYPE
@@ -89,7 +88,7 @@ encodePairOf = fun (pairOfEncoder @a @b)
 
 pairOfEncoder :: Encoder a -> Encoder b -> Encoder (a, b)
 pairOfEncoder (Encoder ea) (Encoder eb) =
-  Encoder $ \(a, b) -> JsonTerm.list [ea a, eb b]
+  Encoder $ \(a, b) -> JsonTerm.array [ea a, eb b]
 
 -- | Create an Encoder for a tripe (a, b, c)
 encodeTripleOf :: forall a b c. (Typeable a, Typeable b, Typeable c) => Typed (Encoder a -> Encoder b -> Encoder c -> Encoder (a, b, c))
@@ -97,7 +96,7 @@ encodeTripleOf = fun (tripleOfEncoder @a @b @c)
 
 tripleOfEncoder :: Encoder a -> Encoder b -> Encoder c -> Encoder (a, b, c)
 tripleOfEncoder (Encoder ea) (Encoder eb) (Encoder ec) =
-  Encoder $ \(a, b, c) -> JsonTerm.list [ea a, eb b, ec c]
+  Encoder $ \(a, b, c) -> JsonTerm.array [ea a, eb b, ec c]
 
 -- | Create an Encoder for a Set a
 encodeSetOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder (Set a))
@@ -105,7 +104,7 @@ encodeSetOf = fun (setOfEncoder @a)
 
 setOfEncoder :: Encoder a -> Encoder (Set a)
 setOfEncoder (Encoder ea) = Encoder $ \as ->
-  JsonTerm.list ((\a -> ea a) <$> S.toList as)
+  JsonTerm.array ((\a -> ea a) <$> S.toList as)
 
 -- | Create an Encoder for a list [a]
 encodeListOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder [a])
@@ -113,7 +112,7 @@ encodeListOf = fun (listOfEncoder @a)
 
 listOfEncoder :: Encoder a -> Encoder [a]
 listOfEncoder (Encoder ea) = Encoder $ \as ->
-  JsonTerm.list ((\a -> ea a) <$> as)
+  JsonTerm.array ((\a -> ea a) <$> as)
 
 -- | Create an Encoder for a map a b
 encodeMapOf :: forall a b. (Typeable a, Typeable b) => Typed (KeyEncoder a -> Encoder b -> Encoder (Map a b))
@@ -121,7 +120,7 @@ encodeMapOf = fun (mapOfEncoder @a @b)
 
 mapOfEncoder :: KeyEncoder a -> Encoder b -> Encoder (Map a b)
 mapOfEncoder (KeyEncoder ea) (Encoder eb) = Encoder $ \ms ->
-  JsonTerm.pairs $ (\(k, v) -> JsonTerm.pair (ea k) (eb v)) <$> M.assocs ms
+  JsonTerm.object $ (\(k, v) -> JsonTerm.pair (ea k) (eb v)) <$> M.assocs ms
 
 -- | Create an Encoder for a non-empty list (NonEmpty a)
 encodeNonEmptyOf :: forall a. (Typeable a) => Typed (Encoder a -> Encoder (NonEmpty a))
@@ -129,10 +128,6 @@ encodeNonEmptyOf = fun (nonEmptyOfEncoder @a)
 
 nonEmptyOfEncoder :: Encoder a -> Encoder (NonEmpty a)
 nonEmptyOfEncoder = contramap toList . listOfEncoder
-
--- | Shortcut function to create arrays
-array :: [Value] -> Value
-array = Array . V.fromList
 
 -- * DEFAULT VALUES
 
@@ -200,7 +195,7 @@ makeEncoderFromConstructor options fromConstructor = do
                 else valuesToObject names values
             _ ->
               if P.null names
-                then JsonTerm.list values
+                then JsonTerm.array values
                 else valuesToObject names values
     -- sum constructor
     _ ->
@@ -215,7 +210,7 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
         then case values of
           [] -> JsonTerm.string constructorTag
           [v] -> v
-          vs -> JsonTerm.list vs
+          vs -> JsonTerm.array vs
         else do
           case values of
             [v] | unwrapUnaryRecords options -> v
@@ -224,44 +219,44 @@ makeSumEncoding options (FromConstructor _constructorNames _constructorTypes con
       if P.null fieldNames
         then case values of
           [] -> JsonTerm.string (toS constructorTag)
-          [v] -> JsonTerm.list [JsonTerm.string constructorTag, v]
-          _ -> JsonTerm.list [JsonTerm.string constructorTag, JsonTerm.list values]
+          [v] -> JsonTerm.array [JsonTerm.string constructorTag, v]
+          _ -> JsonTerm.array [JsonTerm.string constructorTag, JsonTerm.array values]
         else case values of
           [v]
             | unwrapUnaryRecords options ->
-                JsonTerm.list [JsonTerm.string constructorTag, v]
+                JsonTerm.array [JsonTerm.string constructorTag, v]
           _ ->
-            JsonTerm.list [JsonTerm.string constructorTag, valuesToObject fieldNames values]
+            JsonTerm.array [JsonTerm.string constructorTag, valuesToObject fieldNames values]
     ObjectWithSingleField -> do
       if P.null fieldNames
         then case values of
           [] -> JsonTerm.string constructorTag
-          [v] -> JsonTerm.pairs [JsonTerm.pair (K.fromText constructorTag) v]
-          _ -> JsonTerm.pairs [JsonTerm.pair (K.fromText constructorTag) (JsonTerm.list values)]
+          [v] -> JsonTerm.object [JsonTerm.pair (K.fromText constructorTag) v]
+          _ -> JsonTerm.object [JsonTerm.pair (K.fromText constructorTag) (JsonTerm.array values)]
         else case values of
           [v]
             | unwrapUnaryRecords options ->
-                JsonTerm.pairs [JsonTerm.pair (K.fromText constructorTag) v]
+                JsonTerm.object [JsonTerm.pair (K.fromText constructorTag) v]
           _ -> do
-            JsonTerm.pairs [JsonTerm.pair (K.fromText constructorTag) (valuesToObject fieldNames values)]
+            JsonTerm.object [JsonTerm.pair (K.fromText constructorTag) (valuesToObject fieldNames values)]
     TaggedObject tagFieldName contentsFieldName ->
       if P.null values
-        then JsonTerm.pairs [JsonTerm.pair (K.fromText $ toS tagFieldName) (JsonTerm.string constructorTag)]
+        then JsonTerm.object [JsonTerm.pair (K.fromText $ toS tagFieldName) (JsonTerm.string constructorTag)]
         else
           if P.null fieldNames
             then case values of
               [v] ->
-                JsonTerm.pairs
+                JsonTerm.object
                   [ JsonTerm.pair (K.fromText $ toS tagFieldName) (JsonTerm.string constructorTag),
                     JsonTerm.pair (K.fromText $ toS contentsFieldName) v
                   ]
               _ ->
-                JsonTerm.pairs
+                JsonTerm.object
                   [ JsonTerm.pair (K.fromText $ toS tagFieldName) (JsonTerm.string constructorTag),
-                    JsonTerm.pair (K.fromText $ toS contentsFieldName) (JsonTerm.list values)
+                    JsonTerm.pair (K.fromText $ toS contentsFieldName) (JsonTerm.array values)
                   ]
             else
-              JsonTerm.pairs
+              JsonTerm.object
                 ( JsonTerm.pair (K.fromText $ toS tagFieldName) (JsonTerm.string constructorTag)
                     : (uncurry JsonTerm.pair <$> zip fieldNamesKeys values)
                 )
@@ -284,4 +279,4 @@ modifyFromConstructorWithOptions options fc = do
 --   both as a Value and as an Encoding
 valuesToObject :: [Text] -> [JsonTerm] -> JsonTerm
 valuesToObject fieldNames values =
-  JsonTerm.pairs $ ((\(n, v) -> JsonTerm.pair (K.fromText n) v)) <$> zip fieldNames values
+  JsonTerm.object $ ((\(n, v) -> JsonTerm.pair (K.fromText n) v)) <$> zip fieldNames values

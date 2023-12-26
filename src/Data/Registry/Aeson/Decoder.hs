@@ -68,6 +68,10 @@ decodeByteString d bs =
         Right a -> pure a
         Left e -> Left $ "Cannot decode the type '" <> toS (showType @a) <> "' >> " <> e
 
+-- | Use a Decoder to decode some Text into the desired type
+decodeText :: forall a. (Typeable a) => Decoder a -> Text -> Either Text a
+decodeText d t = decodeByteString d (BL.fromStrict $ encodeUtf8 t)
+
 -- * CREATING KEY DECODERS
 
 -- | Create a decoder for a key which can be read from text

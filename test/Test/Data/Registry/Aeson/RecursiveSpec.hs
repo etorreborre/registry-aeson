@@ -30,5 +30,5 @@ pathEncoder intEncoder = do
         File n ->
           encode intEncoder n
         Directory paths ->
-          list $ (\p -> encode thisEncoder p) <$> paths
+          array $ (\p -> encode thisEncoder p) <$> paths
   thisEncoder

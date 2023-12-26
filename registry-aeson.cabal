@@ -75,8 +75,8 @@ test-suite spec
       Test.Data.Registry.Aeson.Examples.Deliverix
       Test.Data.Registry.Aeson.Examples.ProtocolEvolution
       Test.Data.Registry.Aeson.Examples.Protocols
-      Test.Data.Registry.Aeson.Examples.Restaurant.EncodeDecode
       Test.Data.Registry.Aeson.Examples.Restaurant.Model
+      Test.Data.Registry.Aeson.Examples.Restaurant.TableSpec
       Test.Data.Registry.Aeson.RecursiveSpec
       Test.Data.Registry.Aeson.RoundtripData
       Test.Data.Registry.Aeson.RoundtripSpec
