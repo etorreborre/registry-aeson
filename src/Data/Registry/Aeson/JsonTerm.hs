@@ -12,7 +12,7 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.Scientific hiding (scientific)
 import Data.Vector qualified as V
 import GHC.Num.Integer
-import Protolude hiding (bool, list, null)
+import Protolude hiding (bool, list, null, empty)
 
 -- | This data type defines operations which can be used to create JSON terms
 --   The exact representation is fixed by the type variable `a`.
@@ -24,56 +24,64 @@ data JsonAlgebra r = JsonAlgebra
     bool_ :: Bool -> r (),
     null_ :: r (),
     pair_ :: A.Key -> r () -> r A.Key,
-    object_ :: [r A.Key] -> r (),
+    empty_ :: r A.Key,
+    concatenate_ :: r A.Key -> r A.Key -> r A.Key,
+    object_ :: r A.Key -> r (),
     array_ :: [r ()] -> r (),
     toJson_ :: (Value, Encoding) -> r ()
   }
 
--- | Implementation of a JsonAlgebra returning a Value
-data Valued k where
-  Valued :: Value -> Valued ()
-  Paired :: A.Key -> Valued () -> Valued A.Key
+-- | Implementation of a JsonAlgebra returning single or multiple values of type `a`
+data Values k where
+  SingleValue :: Value -> Values ()
+  ManyValues :: [(A.Key, Value)] -> Values A.Key
 
-toValue :: Valued k -> Value
-toValue (Valued v) = v
-toValue (Paired k v) = A.Object $ KM.fromList [(k, toValue v)]
+toValue :: Values k -> Value
+toValue (SingleValue v) = v
+toValue (ManyValues vs) = A.Object . KM.fromList $ vs
 
-valueJsonAlgebra :: JsonAlgebra Valued
+valueJsonAlgebra :: JsonAlgebra Values
 valueJsonAlgebra = JsonAlgebra {..}
   where
-    string_ :: Text -> Valued ()
-    string_ = Valued . A.String
+    string_ :: Text -> Values ()
+    string_ = SingleValue . A.String
 
-    number_ :: Scientific -> Valued ()
-    number_ = Valued . A.Number
+    number_ :: Scientific -> Values  ()
+    number_ = SingleValue . A.Number
 
-    bool_ :: Bool -> Valued ()
-    bool_ = Valued . A.Bool
+    bool_ :: Bool -> Values ()
+    bool_ = SingleValue . A.Bool
 
-    null_ :: Valued ()
-    null_ = Valued A.Null
+    null_ :: Values ()
+    null_ = SingleValue A.Null
 
-    pair_ :: A.Key -> Valued () -> Valued A.Key
-    pair_ = Paired
+    pair_ :: A.Key -> Values () -> Values A.Key
+    pair_ k (SingleValue v) = ManyValues [(k, v)]
 
-    object_ :: [Valued A.Key] -> Valued ()
-    object_ = Valued . A.Object . KM.fromList . fmap (\(Paired k (Valued v)) -> (k, v))
+    empty_ :: Values A.Key
+    empty_ = ManyValues []
 
-    array_ :: [Valued ()] -> Valued ()
-    array_ = Valued . A.Array . fmap (\(Valued v) -> v) . V.fromList
+    concatenate_ :: Values A.Key -> Values A.Key -> Values A.Key
+    concatenate_ (ManyValues vs1) (ManyValues vs2) = ManyValues (vs1 <> vs2)
 
-    toJson_ :: (Value, Encoding) -> Valued ()
-    toJson_ = Valued . fst
+    object_ :: Values A.Key -> Values ()
+    object_ (ManyValues vs) = SingleValue . A.Object $ KM.fromList vs
+
+    array_ :: [Values ()] -> Values ()
+    array_ = SingleValue . A.Array . fmap (\(SingleValue v) -> v) . V.fromList
+
+    toJson_ :: (Value, Encoding) -> Values ()
+    toJson_ = SingleValue . fst
 
 
 -- | Implementation of a JsonAlgebra returning an Encoding
 data Encoded k where
   Encoded :: Encoding -> Encoded ()
-  Keyed :: A.Key -> Encoded () -> Encoded A.Key
+  CommaSeparated :: E.Series -> Encoded A.Key
 
 toEncoding :: Encoded k -> Encoding
-toEncoding (Encoded v) = v
-toEncoding (Keyed k v) = E.pairs (E.pair k (toEncoding v))
+toEncoding (Encoded e) = e
+toEncoding (CommaSeparated s) = E.pairs s
 
 encodingJsonAlgebra :: JsonAlgebra Encoded
 encodingJsonAlgebra = JsonAlgebra {..}
@@ -91,10 +99,16 @@ encodingJsonAlgebra = JsonAlgebra {..}
     null_ = Encoded E.null_
 
     pair_ :: A.Key -> Encoded () -> Encoded A.Key
-    pair_ = Keyed
+    pair_ k (Encoded e) = CommaSeparated $ E.pair k e
 
-    object_ :: [Encoded A.Key] -> Encoded ()
-    object_ = Encoded . E.pairs . foldMap identity . fmap (\(Keyed k (Encoded v)) -> E.pair k v)
+    empty_ :: Encoded A.Key
+    empty_ = CommaSeparated mempty
+
+    concatenate_ :: Encoded A.Key -> Encoded A.Key -> Encoded A.Key
+    concatenate_ (CommaSeparated s1) (CommaSeparated s2) = CommaSeparated (s1 <> s2)
+
+    object_ :: Encoded A.Key -> Encoded ()
+    object_ (CommaSeparated s) = Encoded $ E.pairs s
 
     array_ :: [Encoded ()] -> Encoded ()
     array_ = Encoded . E.list identity .fmap toEncoding
@@ -110,7 +124,11 @@ newtype JsonTerm a = JsonTerm {runTerm :: forall r. JsonAlgebra r -> r a}
 
 -- | Apply a specific algebra implementation to a term
 (<%>) :: JsonTerm () -> JsonAlgebra r -> r ()
-(<%>) (JsonTerm t) j = t j
+(<%>) = interpret
+
+-- | Apply a specific algebra implementation to a term
+interpret :: JsonTerm () -> JsonAlgebra r -> r ()
+interpret (JsonTerm t) j = t j
 
 -- | Apply a specific algebra implementation to a term
 makeValue :: JsonTerm a -> Value
@@ -158,13 +176,28 @@ null = JsonTerm $ \ja -> null_ ja
 pair :: A.Key -> JsonTerm () -> (forall r. JsonAlgebra r -> r A.Key)
 pair k v ja = pair_ ja k (v <%> ja)
 
+-- | Create an empty list of pairs
+empty :: (forall r. JsonAlgebra r -> r A.Key)
+empty = empty_
+
+-- | Concatenate 2 pair terms
+concatenate :: (forall r. JsonAlgebra r -> r A.Key) -> (forall r. JsonAlgebra r -> r A.Key) -> (forall r. JsonAlgebra r -> r A.Key)
+concatenate v1 v2 ja = concatenate_ ja (v1 ja) (v2 ja)
+
+(><) :: (forall r. JsonAlgebra r -> r A.Key) -> (forall r. JsonAlgebra r -> r A.Key) -> (forall r. JsonAlgebra r -> r A.Key)
+(><) = concatenate
+
 -- | Create an object from a list of pairs
-object :: [(forall r. JsonAlgebra r -> r A.Key)] -> JsonTerm ()
-object vs = JsonTerm $ \ja -> object_ ja ((\v -> v ja) <$> vs)
+object :: (forall r. JsonAlgebra r -> r A.Key) -> JsonTerm ()
+object vs = JsonTerm $ \ja -> object_ ja (vs ja)
 
 -- | Create an object from a single pair
 single :: A.Key -> JsonTerm () -> JsonTerm ()
-single k v = object [pair k v]
+single k v = object (pair k v)
+
+-- | Create an object from a single pair
+fold :: [(A.Key, JsonTerm ())] -> JsonTerm ()
+fold vs = JsonTerm $ \ja -> object_ ja $ foldr (\(k, v) r -> concatenate_ ja (pair_ ja k (v <%> ja)) r) (empty_ ja) vs
 
 -- | Create an array from a list of terms
 array :: [JsonTerm ()] -> JsonTerm ()

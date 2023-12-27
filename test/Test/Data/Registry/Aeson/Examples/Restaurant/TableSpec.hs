@@ -46,10 +46,9 @@ encoders =
 
 singleTableEncoder :: Encoder Natural -> Encoder SingleTable
 singleTableEncoder nat = Encoder \(SingleTable c m) ->
-  object
-    [ pair "capacity" (encode nat c),
-      pair "minimalReservation" (encode nat m)
-    ]
+  object $
+    (pair "capacity" (encode nat c)) ><
+      (pair "minimalReservation" (encode nat m))
 
 tableEncoder :: Encoder Natural -> Encoder SingleTable -> Encoder Table
 tableEncoder nat st = Encoder \case
