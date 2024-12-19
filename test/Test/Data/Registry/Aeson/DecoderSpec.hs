@@ -64,7 +64,7 @@ test_errors = test "report errors" $ do
   checkErrors @Person "{'email':{'_email':123},'identifier':123}" "Cannot decode the type 'Person' >> 'email :: Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
   checkErrors @Team
     "{'name':'team1', 'members': [{'email':{'_email':'1'},'identifier':1}, {'email':{'_email':2},'identifier':2}], 'leaderName':'me'}"
-    "Cannot decode the type 'Team' >> 'members :: [] Person' >> 'email :: Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
+    "Cannot decode the type 'Team' >> 'members :: List Person' >> 'email :: Email' >> '_email :: Text' >> parsing Text failed, expected String, but encountered Number"
   checkErrors @Team
     "{'name':'team1', 'members': [{'email':{'_email':'1'},'identifier':1}, {'email':{'_email':'2'},'identifier':2}], 'leaderName':123}"
     "Cannot decode the type 'Team' >> 'leaderName :: Maybe Text' >> parsing Text failed, expected String, but encountered Number"

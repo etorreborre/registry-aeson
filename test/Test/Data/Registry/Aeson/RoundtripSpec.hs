@@ -82,8 +82,8 @@ test_regressions = test "regressions" $ do
 
 roundtrip :: forall a. (Show a, Eq a, Typeable a) => PropertyT IO ()
 roundtrip = withFrozenCallStack $ do
-  a <- forall @a
-  options <- forall @Options
+  a <- for_all @a
+  options <- for_all @Options
   let encoder = make @(Encoder a) (val options <: encoders)
   let decoder = make @(Decoder a) (val options <: decoders)
   let encoded = BL.fromStrict $ encodeByteString encoder a
@@ -181,8 +181,8 @@ decoders =
 
 -- Generators
 
-forall :: forall a. (Show a, Typeable a) => PropertyT IO a
-forall = forAll $ make @(Gen a) generators
+for_all :: forall a. (Show a, Typeable a) => PropertyT IO a
+for_all = forAll $ make @(Gen a) generators
 
 generators =
   tweak @(Gen SumEncoding) (fmap adjustTaggedObject) $
