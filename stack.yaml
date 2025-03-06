@@ -1,11 +1,11 @@
-resolver: lts-22.43
+resolver: lts-23.11
 
 packages:
 - '.'
 
 extra-deps:
-  - registry-0.6.3.0
-  - registry-hedgehog-0.8.2.0
+  - registry-0.6.3.1
+  - registry-hedgehog-0.8.2.1
 
 flags: {}
 
